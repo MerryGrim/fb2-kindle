@@ -1,0 +1,39 @@
+# Generated application binaries and installers
+*.exe
+*.dll
+*.pdb
+*.msi
+*.msix
+*.msixbundle
+*.sha256
+
+# Bundled third-party runtime files and sources
+/engine/
+
+# Books and archives; keep private content out of Git
+*.fb2
+*.epub
+*.azw3
+*.mobi
+*.pdf
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.xz
+
+# Build output, local tests, logs and temporary files
+/bin/
+/obj/
+/build/
+/dist/
+/outputs/
+/work/
+*.log
+*.tmp
+*.bak
+.vs/
+.idea/
+Thumbs.db
+Desktop.ini

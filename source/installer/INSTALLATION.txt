@@ -1,0 +1,93 @@
+FB2 KINDLE 1.2.1 — УСТАНОВЛЕННАЯ ВЕРСИЯ
+
+Конвертер книг FB2, ZIP, RAR и 7Z в EPUB и AZW3 для Windows 10/11 x64.
+
+Как начать
+
+1. Откройте FB2 Kindle через меню «Пуск».
+2. Нажмите «Добавить книги» или перетащите книги и архивы в окно.
+3. Выберите EPUB или AZW3 и папку сохранения.
+4. Нажмите «Конвертировать».
+
+Каждая книга сохраняется отдельным файлом. Если имя уже занято, к нему
+добавляется номер. Исходные книги и готовые результаты не перезаписываются.
+Архивы с несколькими книгами и вложенными папками распаковывать не нужно.
+
+EPUB подходит для Amazon Send to Kindle и совместимых читалок.
+Для прямого копирования на Kindle по USB выберите AZW3.
+Копирование файлов и отправку в Amazon вы выполняете самостоятельно.
+
+Все движки включены в установку. Книги обрабатываются на компьютере;
+интернет для конвертации не нужен. Нужен .NET Framework 4.8 или более новая
+совместимая версия. На современных Windows он обычно уже установлен.
+
+Обновление и удаление
+
+Для обновления запустите установщик новой версии. Он использует прежнюю
+папку установки. Перед обновлением закройте программу.
+
+Удалить FB2 Kindle можно через «Параметры» → «Приложения» в Windows.
+Удаляются только установленные файлы программы. Ваши книги и созданные
+EPUB/AZW3 остаются на месте, в том числе если вы сохранили их в папке
+программы.
+
+Подробное описание и ограничения: README.md рядом с программой.
+Исходники приложения: source.
+Лицензии и исходные архивы движков: engine\Calibre и engine\Archive7z.
+
+
+FB2 KINDLE 1.2.1 — INSTALLED VERSION
+
+Convert FB2 books and ZIP, RAR and 7Z archives to EPUB or AZW3 on
+Windows 10/11 x64.
+
+1. Open FB2 Kindle from the Start menu.
+2. Use Add books or drag books and archives into the window.
+3. Choose EPUB or AZW3 and an output folder.
+4. Start conversion.
+
+Each book becomes a separate file. Existing books and output files are
+never overwritten. Archives may contain multiple books and subfolders.
+
+Use EPUB for Amazon Send to Kindle or compatible e-readers. Use AZW3 for
+copying directly to Kindle by USB. You transfer or send the files yourself.
+
+Conversion is local and works offline. All engines are included.
+Microsoft .NET Framework 4.8 or a later compatible version is required.
+
+To upgrade, close the application and run the newer installer. To remove
+the application, use Windows Settings → Apps. The uninstaller removes
+installed program files only; your books and converted files are kept.
+
+Detailed instructions and limitations: README.md next to the application.
+Application source: source.
+Engine notices and matching source archives: engine\Calibre and
+engine\Archive7z.
+
+
+FB2 KINDLE 1.2.1 — 已安装版本
+
+在 Windows 10/11 x64 上将 FB2 图书和 ZIP、RAR、7Z 压缩包转换为
+EPUB 或 AZW3。
+
+1. 从“开始”菜单打开 FB2 Kindle。
+2. 点击“添加图书”或将图书和压缩包拖入窗口。
+3. 选择 EPUB 或 AZW3 格式，以及保存位置。
+4. 开始转换。
+
+每本图书将保存为单独的文件。不会覆盖现有图书或输出文件。
+压缩包可以包含多本图书和子文件夹，无需手动解压。
+
+通过 Amazon Send to Kindle 发送时使用 EPUB；通过 USB 直接复制
+到 Kindle 时使用 AZW3。文件的复制或发送由您自行完成。
+
+转换在本机离线进行，已包含所有转换引擎。需要 Microsoft
+.NET Framework 4.8 或更高的兼容版本。
+
+升级时请先关闭应用程序，然后运行新版本安装程序。卸载可通过
+Windows“设置”→“应用”完成。卸载程序仅删除已安装的程序文件，
+保留您的图书和转换后的文件。
+
+详细说明和限制：程序旁的 README.md。
+应用程序源代码：source。
+引擎许可声明和对应的源代码压缩包：engine\Calibre 和 engine\Archive7z。
