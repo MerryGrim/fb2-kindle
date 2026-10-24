@@ -9,6 +9,7 @@ namespace Fb2Kindle
     {
         static readonly Dictionary<string, string[]> Translations = new Dictionary<string, string[]>(StringComparer.Ordinal);
         static volatile string languageCode = "ru";
+        public static bool Isolated;
         static string SettingsPath
         {
             get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FB2Kindle", "language.txt"); }
@@ -17,6 +18,7 @@ namespace Fb2Kindle
         static L10n()
         {
             InitializeTranslations();
+            InitializeMiraTranslations();
             try
             {
                 string saved = File.ReadAllText(SettingsPath, Encoding.UTF8).Trim();
@@ -32,6 +34,7 @@ namespace Fb2Kindle
         {
             if (code != "ru" && code != "en" && code != "zh") throw new ArgumentException("Unsupported UI language", "code");
             languageCode = code;
+            if (Isolated) return;
             try
             {
                 string path = SettingsPath;

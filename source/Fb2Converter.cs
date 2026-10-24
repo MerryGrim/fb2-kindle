@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using System.Threading;
 
 namespace Fb2Kindle
 {
@@ -87,6 +88,7 @@ namespace Fb2Kindle
             public HashSet<string> WarningSet = new HashSet<string>(StringComparer.Ordinal);
             public int NextId;
             public int NextReference;
+            public ConversionReporter Progress;
             public void Warn(string text)
             {
                 if (WarningSet.Add(text) && Result.Warnings.Count < 120) Result.Warnings.Add(text);
@@ -95,6 +97,13 @@ namespace Fb2Kindle
 
         public static ConversionResult Convert(string inputPath, string outputPath)
         {
+            return Convert(inputPath, outputPath, CancellationToken.None, null);
+        }
+
+        public static ConversionResult Convert(string inputPath, string outputPath, CancellationToken cancellation, Action<ConversionProgress> progress)
+        {
+            ConversionReporter reporter = new ConversionReporter(cancellation, progress);
+            reporter.Report(0, ConversionStage.Reading);
             if (String.IsNullOrWhiteSpace(inputPath)) throw new ArgumentException(L10n.T("Не выбран исходный файл FB2."));
             if (String.IsNullOrWhiteSpace(outputPath)) throw new ArgumentException(L10n.T("Не выбран путь для сохранения EPUB."));
             inputPath = Path.GetFullPath(inputPath);
@@ -106,31 +115,54 @@ namespace Fb2Kindle
                 throw new IOException(L10n.T("Файл с таким именем уже существует. Выберите другое имя для EPUB."));
             string outputDirectory = Path.GetDirectoryName(outputPath);
             if (!Directory.Exists(outputDirectory)) throw new DirectoryNotFoundException(L10n.T("Папка для сохранения не найдена."));
-            byte[] input = ReadInput(inputPath);
-            XDocument document = ReadXml(input);
+            byte[] input = ReadInput(inputPath, reporter);
+            reporter.Report(16, ConversionStage.Reading);
+            XDocument document = ReadXml(input, reporter);
+            reporter.Report(25, ConversionStage.BuildingEpub);
             if (document.Root == null || document.Root.Name.LocalName != "FictionBook")
                 throw new InvalidDataException(L10n.T("В файле нет корневого элемента FictionBook. Это не книга FB2."));
-            Book book = BuildBook(document, inputPath);
+            Book book = BuildBook(document, inputPath, reporter);
+            reporter.Report(65, ConversionStage.BuildingEpub);
             // The sibling temporary file and final move are on the same volume. File.Move
             // refuses an existing destination, including one created during conversion.
             string temporary = Path.Combine(outputDirectory, ".fb2kindle-" + Guid.NewGuid().ToString("N") + ".tmp");
             try
             {
                 using (FileStream output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (EpubZip zip = new EpubZip(output))
+                using (EpubZip zip = new EpubZip(output, reporter))
                 {
+                    int totalFiles = 6 + book.Chapters.Count + book.Pictures.Count;
+                    int completedFiles = 0;
+                    Action fileWritten = delegate { reporter.Report(65 + ++completedFiles * 32 / totalFiles, ConversionStage.BuildingEpub); };
                     zip.Add("mimetype", Encoding.ASCII.GetBytes("application/epub+zip"), false);
+                    fileWritten();
                     zip.Add("META-INF/container.xml", XmlBytes(ContainerDocument()), true);
+                    fileWritten();
                     zip.Add("OEBPS/styles/style.css", Encoding.UTF8.GetBytes(Styles), true);
+                    fileWritten();
                     foreach (Chapter chapter in book.Chapters)
+                    {
+                        reporter.Check();
                         zip.Add("OEBPS/text/" + chapter.File, XmlBytes(ChapterDocument(book, chapter)), true);
+                        fileWritten();
+                    }
                     foreach (Picture picture in book.Pictures.Values)
+                    {
+                        reporter.Check();
                         zip.Add("OEBPS/images/" + picture.File, picture.Bytes, false);
+                        fileWritten();
+                    }
                     zip.Add("OEBPS/nav.xhtml", XmlBytes(NavigationDocument(book)), true);
+                    fileWritten();
                     zip.Add("OEBPS/toc.ncx", XmlBytes(NcxDocument(book)), true);
+                    fileWritten();
                     zip.Add("OEBPS/content.opf", XmlBytes(PackageDocument(book)), true);
+                    fileWritten();
                 }
+                reporter.Report(99, ConversionStage.Saving);
+                reporter.Check();
                 File.Move(temporary, outputPath);
+                reporter.Complete();
                 return book.Result;
             }
             finally
@@ -142,14 +174,14 @@ namespace Fb2Kindle
             }
         }
 
-        private static byte[] ReadInput(string path)
+        private static byte[] ReadInput(string path, ConversionReporter progress)
         {
             string extension = Path.GetExtension(path).ToLowerInvariant();
             if (extension != ".fb2" && extension != ".zip")
                 throw new InvalidDataException(L10n.T("Выберите файл .fb2 или ZIP-архив с одной книгой FB2."));
             using (FileStream input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                if (extension == ".fb2") return ReadBounded(input, MaxInputBytes);
+                if (extension == ".fb2") return ReadBounded(input, MaxInputBytes, input.Length, progress);
                 if (input.Length > MaxArchiveBytes)
                     throw new InvalidDataException(L10n.T("ZIP-архив слишком большой: предел — 256 МБ."));
                 try
@@ -165,7 +197,7 @@ namespace Fb2Kindle
                             throw new InvalidDataException(L10n.T("В ZIP-архиве несколько книг FB2. Распакуйте архив и выберите одну книгу."));
                         if (books[0].Length > MaxInputBytes)
                             throw new InvalidDataException(L10n.T("Книга в ZIP-архиве слишком большая: предел — 96 МБ."));
-                        using (Stream entry = books[0].Open()) return ReadBounded(entry, MaxInputBytes);
+                        using (Stream entry = books[0].Open()) return ReadBounded(entry, MaxInputBytes, books[0].Length, progress);
                     }
                 }
                 catch (InvalidDataException exception)
@@ -179,7 +211,7 @@ namespace Fb2Kindle
             }
         }
 
-        private static byte[] ReadBounded(Stream input, long limit)
+        private static byte[] ReadBounded(Stream input, long limit, long totalBytes, ConversionReporter progress)
         {
             if (input.CanSeek && input.Length > limit)
                 throw new InvalidDataException(L10n.T("Книга слишком большая: предел для FB2 — 96 МБ."));
@@ -189,15 +221,17 @@ namespace Fb2Kindle
                 int count;
                 while ((count = input.Read(buffer, 0, buffer.Length)) != 0)
                 {
+                    progress.Check();
                     if (output.Length + count > limit)
                         throw new InvalidDataException(L10n.T("Книга слишком большая: предел для FB2 — 96 МБ."));
                     output.Write(buffer, 0, count);
+                    progress.Report(totalBytes > 0 ? (int)Math.Min(15, output.Length * 15 / totalBytes) : 0, ConversionStage.Reading);
                 }
                 return output.ToArray();
             }
         }
 
-        private static XDocument ReadXml(byte[] bytes)
+        private static XDocument ReadXml(byte[] bytes, ConversionReporter progress)
         {
             XmlReaderSettings settings = new XmlReaderSettings
             {
@@ -218,6 +252,7 @@ namespace Fb2Kindle
                     int nodes = 0;
                     while (reader.Read())
                     {
+                        if ((nodes & 255) == 0) progress.Check();
                         if (reader.Depth > MaxDepth || ++nodes > MaxNodes)
                             throw new InvalidDataException(L10n.T("Слишком сложная структура FB2: превышен предел вложенности или числа элементов."));
                     }
@@ -237,9 +272,10 @@ namespace Fb2Kindle
             }
         }
 
-        private static Book BuildBook(XDocument document, string inputPath)
+        private static Book BuildBook(XDocument document, string inputPath, ConversionReporter progress)
         {
             Book book = new Book();
+            book.Progress = progress;
             XElement root = document.Root;
             XElement description = Child(root, "description");
             XElement titleInfo = Child(description, "title-info");
@@ -278,6 +314,7 @@ namespace Fb2Kindle
             XElement coverImage = Child(coverpage, "image");
             book.CoverId = Fragment(Attribute(coverImage, "href"));
             LoadPictures(book, root);
+            progress.Report(30, ConversionStage.BuildingEpub);
 
             Picture cover;
             if (book.CoverId.Length != 0 && book.Pictures.TryGetValue(book.CoverId, out cover))
@@ -301,6 +338,7 @@ namespace Fb2Kindle
             int mainBodyNumber = 0;
             foreach (XElement body in bodies)
             {
+                progress.Check();
                 string name = Attribute(body, "name");
                 bool notes = String.Equals(name, "notes", StringComparison.OrdinalIgnoreCase) ||
                     String.Equals(name, "comments", StringComparison.OrdinalIgnoreCase);
@@ -310,6 +348,7 @@ namespace Fb2Kindle
                 int unnamed = 0;
                 foreach (XElement element in body.Elements())
                 {
+                    progress.Check();
                     if (element.Name.LocalName == "section")
                     {
                         pending = null;
@@ -330,10 +369,12 @@ namespace Fb2Kindle
 
             foreach (Chapter chapter in book.Chapters)
             {
+                progress.Check();
                 foreach (XElement source in chapter.Sources)
                 {
                     foreach (XElement element in source.DescendantsAndSelf())
                     {
+                        progress.Check();
                         string sourceId = Attribute(element, "id");
                         if (sourceId.Length == 0 && element.Name.LocalName != "section") continue;
                         Target target = new Target { Chapter = chapter, Source = element,
@@ -352,6 +393,7 @@ namespace Fb2Kindle
                 foreach (XElement source in chapter.Sources)
                     foreach (XElement anchor in source.DescendantsAndSelf().Where(e => e.Name.LocalName == "a"))
                     {
+                        progress.Check();
                         Target target;
                         string href = Attribute(anchor, "href");
                         if (!href.StartsWith("#", StringComparison.Ordinal) || !book.Targets.TryGetValue(Fragment(href), out target)) continue;
@@ -371,8 +413,10 @@ namespace Fb2Kindle
                         links.Add(new Backlink { Chapter = chapter, Id = referenceId });
                     }
 
+            int renderedChapters = 0;
             foreach (Chapter chapter in book.Chapters)
             {
+                progress.Check();
                 if (chapter.Content == null)
                 {
                     chapter.Content = new XElement(Html + "div", new XAttribute("class", chapter.Notes ? "notes" : "chapter"));
@@ -390,6 +434,7 @@ namespace Fb2Kindle
                 else
                     foreach (XElement source in chapter.Sources) AddSectionToc(book, chapter, source, item.Children);
                 book.Toc.Add(item);
+                progress.Report(35 + ++renderedChapters * 29 / book.Chapters.Count, ConversionStage.BuildingEpub);
             }
             book.Result.ChapterCount = book.Chapters.Count(c => !c.Ancillary && !c.Notes);
             if (book.Result.ChapterCount == 0) book.Result.ChapterCount = book.Chapters.Count(c => !c.Ancillary);
@@ -413,6 +458,7 @@ namespace Fb2Kindle
             int number = 0;
             foreach (XElement binary in Children(root, "binary"))
             {
+                book.Progress.Check();
                 string id = Attribute(binary, "id");
                 if (id.Length == 0) { book.Warn(L10n.T("Встроенное изображение без идентификатора пропущено.")); continue; }
                 if (book.Pictures.ContainsKey(id)) { book.Warn(L10n.T("Повторяющееся изображение «") + Short(id) + L10n.T("» пропущено.")); continue; }
@@ -466,6 +512,7 @@ namespace Fb2Kindle
 
         private static XElement RenderElement(Book book, Chapter chapter, XElement source, int depth)
         {
+            book.Progress.Check();
             string name = source.Name.LocalName;
             string tag;
             string cssClass = null;
@@ -912,14 +959,16 @@ nav ol { list-style-type: none; padding-left: 1em; } nav li { margin: 0.45em 0; 
                 public ushort Method;
             }
             private readonly BinaryWriter writer;
+            private readonly ConversionReporter progress;
             private readonly List<Entry> entries = new List<Entry>();
             private bool disposed;
             private readonly ushort date;
             private readonly ushort time;
             private static readonly uint[] CrcTable = MakeCrcTable();
 
-            public EpubZip(Stream output)
+            public EpubZip(Stream output, ConversionReporter progress)
             {
+                this.progress = progress;
                 writer = new BinaryWriter(output, Encoding.UTF8, true);
                 DateTime now = DateTime.Now;
                 date = (ushort)(((Math.Max(1980, Math.Min(2107, now.Year)) - 1980) << 9) | (now.Month << 5) | now.Day);
@@ -928,6 +977,7 @@ nav ol { list-style-type: none; padding-left: 1em; } nav li { margin: 0.45em 0; 
 
             public void Add(string name, byte[] bytes, bool compress)
             {
+                progress.Check();
                 if (entries.Count >= 65534) throw new InvalidDataException(L10n.T("В EPUB слишком много файлов."));
                 byte[] packed = bytes;
                 ushort method = 0;
@@ -936,7 +986,13 @@ nav ol { list-style-type: none; padding-left: 1em; } nav li { margin: 0.45em 0; 
                     using (MemoryStream buffer = new MemoryStream())
                     {
                         using (DeflateStream deflate = new DeflateStream(buffer, CompressionLevel.Optimal, true))
-                            deflate.Write(bytes, 0, bytes.Length);
+                        {
+                            for (int offset = 0; offset < bytes.Length; offset += 65536)
+                            {
+                                progress.Check();
+                                deflate.Write(bytes, offset, Math.Min(65536, bytes.Length - offset));
+                            }
+                        }
                         packed = buffer.ToArray();
                     }
                     method = 8;
@@ -947,7 +1003,12 @@ nav ol { list-style-type: none; padding-left: 1em; } nav li { margin: 0.45em 0; 
                     PackedSize = (uint)packed.Length, Offset = (uint)writer.BaseStream.Position, Method = method };
                 writer.Write(0x04034b50U); writer.Write((ushort)20); writer.Write((ushort)0x0800); writer.Write(method);
                 writer.Write(time); writer.Write(date); writer.Write(entry.Crc); writer.Write(entry.PackedSize); writer.Write(entry.Size);
-                writer.Write((ushort)entry.Name.Length); writer.Write((ushort)0); writer.Write(entry.Name); writer.Write(packed);
+                writer.Write((ushort)entry.Name.Length); writer.Write((ushort)0); writer.Write(entry.Name);
+                for (int offset = 0; offset < packed.Length; offset += 65536)
+                {
+                    progress.Check();
+                    writer.Write(packed, offset, Math.Min(65536, packed.Length - offset));
+                }
                 entries.Add(entry);
             }
 
@@ -970,11 +1031,14 @@ nav ol { list-style-type: none; padding-left: 1em; } nav li { margin: 0.45em 0; 
                 writer.Flush(); writer.Dispose();
             }
 
-            private static uint Crc32(byte[] bytes)
+            private uint Crc32(byte[] bytes)
             {
                 uint crc = 0xffffffffU;
                 for (int i = 0; i < bytes.Length; i++)
+                {
+                    if ((i & 65535) == 0) progress.Check();
                     crc = (crc >> 8) ^ CrcTable[(crc ^ bytes[i]) & 255];
+                }
                 return ~crc;
             }
 

@@ -1,596 +1,205 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
-using System.Windows.Forms;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
+using System.Windows.Forms;
 
 namespace Fb2Kindle
 {
-    public class MainForm : Form
+    public sealed class MainForm : MiraWindow
     {
-        static readonly Color Blue = ColorTranslator.FromHtml("#155EEF");
-        static readonly Color Ink = ColorTranslator.FromHtml("#182230");
-        static readonly Color Muted = ColorTranslator.FromHtml("#667085");
-        static readonly Color Line = ColorTranslator.FromHtml("#E4E7EC");
-        static readonly Color Pale = ColorTranslator.FromHtml("#F7F8FA");
-        readonly List<BookItem> books = new List<BookItem>();
-        readonly DataGridView grid = new DataGridView();
-        readonly TextBox details = new TextBox();
+        readonly MiraQueue queue = new MiraQueue();
+        readonly Label brand = new Label(), subtitle = new Label(), heading = new Label(), count = new Label(), formats = new Label(), formatTitle = new Label(), saveTitle = new Label(), overallTitle = new Label(), overallPercent = new Label(), status = new Label();
+        readonly MiraButton logo = new MiraButton(), theme = new MiraButton(), about = new MiraButton(), minimize = new MiraButton(), maximize = new MiraButton(), close = new MiraButton(), add = new MiraButton(), remove = new MiraButton(), clear = new MiraButton(), drop = new MiraButton(), together = new MiraButton(), beside = new MiraButton(), browse = new MiraButton(), open = new MiraButton(), convert = new MiraButton(), cancel = new MiraButton();
+        readonly MiraFormatButton azw3 = new MiraFormatButton(), epub = new MiraFormatButton();
+        readonly MiraButton language = new MiraButton();
+        readonly MiraContextMenu languageMenu=MiraMenus.Create();
+        readonly MiraPathPanel pathPanel = new MiraPathPanel();
         readonly TextBox outputFolder = new TextBox();
-        readonly CheckBox besideSource = new CheckBox();
-        readonly RadioButton azw3 = new RadioButton();
-        readonly RadioButton epub = new RadioButton();
-        readonly Label queueCount = new Label();
-        readonly Label status = new Label();
-        readonly Label formatHint = new Label();
-        readonly ComboBox languagePicker = new ComboBox();
-        readonly ToolTip toolTips = new ToolTip();
-        readonly Dictionary<Control, string> captions = new Dictionary<Control, string>();
-        readonly Button about;
-        readonly Button convert;
-        readonly Button cancel;
-        readonly Button openFolder;
-        readonly Button add;
-        readonly Button remove;
-        readonly Button clear;
-        readonly Button browse;
-        readonly ProgressBar progress = new ProgressBar();
-        readonly DropPanel drop = new DropPanel();
+        readonly MiraSegmentPanel destinationModes = new MiraSegmentPanel();
+        readonly MiraProgress overall = new MiraProgress();
+        readonly ToolTip tips = new ToolTip {AutoPopDelay=20000};
+        readonly Dictionary<Control,string> captions = new Dictionary<Control,string>();
         CancellationTokenSource cancellation;
-        bool busy;
-        string lastFolder;
-        string statusTemplate = "Добавьте книги для конвертации";
-        object[] statusArguments = new object[0];
-
+        bool busy,preview,initializing=true;
+        string lastFolder,lastResultDirectory,statusKey="Добавьте книги для конвертации";
+        object[] statusArgs = new object[0];
+        int completedCount;
         public MainForm()
         {
-            Text = "FB2 Kindle";
-            ClientSize = new Size(1040, 730);
-            MinimumSize = new Size(900, 715);
-            StartPosition = FormStartPosition.CenterScreen;
-            Font = new Font("Segoe UI", 10);
-            ForeColor = Ink;
-            BackColor = Color.White;
-            AutoScaleMode = AutoScaleMode.Dpi;
-            DoubleBuffered = true;
-            Icon = MakeIcon();
-
-            TableLayoutPanel layout = new TableLayoutPanel();
-            layout.Dock = DockStyle.Fill;
-            layout.Padding = new Padding(28, 22, 28, 18);
-            layout.ColumnCount = 1;
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowCount = 7;
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 49));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 89));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 81));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-            Controls.Add(layout);
-
-            TableLayoutPanel header = Table(2);
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70));
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
-            Panel wordmark = new Panel { Dock = DockStyle.Fill };
-            wordmark.Controls.Add(LabelAt("FB2  /  KINDLE", new Font("Segoe UI Semibold", 25), Ink, 0, 0, 500, 45));
-            wordmark.Controls.Add(LabelAt("Конвертер электронных книг", Font, Muted, 2, 48, 480, 25));
-            header.Controls.Add(wordmark, 0, 0);
-            FlowLayoutPanel preferences = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 8, 0, 0), Margin = Padding.Empty };
-            about = Button("?", false, 35); about.Height = 32; about.Margin = new Padding(8, 0, 0, 0);
-            about.Click += delegate { using (AboutForm dialog = new AboutForm()) dialog.ShowDialog(this); };
-            languagePicker.DropDownStyle = ComboBoxStyle.DropDownList; languagePicker.Width = 145;
-            languagePicker.Font = new Font("Segoe UI", 9); languagePicker.Margin = new Padding(0, 3, 0, 0);
-            languagePicker.Items.Add(new LanguageChoice("ru", "Русский"));
-            languagePicker.Items.Add(new LanguageChoice("en", "English"));
-            languagePicker.Items.Add(new LanguageChoice("zh", "简体中文"));
-            foreach (LanguageChoice choice in languagePicker.Items) if (choice.Code == L10n.LanguageCode) languagePicker.SelectedItem = choice;
-            if (languagePicker.SelectedIndex < 0) languagePicker.SelectedIndex = 0;
-            languagePicker.SelectedIndexChanged += delegate
-            {
-                LanguageChoice choice = languagePicker.SelectedItem as LanguageChoice;
-                if (choice == null || choice.Code == L10n.LanguageCode) return;
-                L10n.SetLanguage(choice.Code); RefreshLanguage();
-            };
-            preferences.Controls.Add(about); preferences.Controls.Add(languagePicker);
-            header.Controls.Add(preferences, 1, 0);
-            layout.Controls.Add(header, 0, 0);
-
-            TableLayoutPanel toolbar = Table(2);
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 80));
-            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
-            FlowLayoutPanel tools = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
-            add = Button("Добавить книги", true, 155);
-            remove = Button("Убрать выбранные", false, 169);
-            clear = Button("Очистить", false, 104);
-            tools.Controls.Add(add); tools.Controls.Add(remove); tools.Controls.Add(clear);
-            add.Click += delegate { ChooseBooks(); };
-            remove.Click += delegate { RemoveBooks(); };
-            clear.Click += delegate { books.Clear(); grid.Rows.Clear(); RefreshCount(); details.Text = L10n.T("Выберите книги FB2 или архивы ZIP, RAR, 7Z."); };
-            toolbar.Controls.Add(tools, 0, 0);
-            queueCount.TextAlign = ContentAlignment.MiddleRight; queueCount.ForeColor = Muted; queueCount.Dock = DockStyle.Fill;
-            toolbar.Controls.Add(queueCount, 1, 0);
-            layout.Controls.Add(toolbar, 0, 1);
-
-            drop.Dock = DockStyle.Fill; drop.Margin = new Padding(0, 0, 0, 13); drop.Cursor = Cursors.Hand;
-            drop.Click += delegate { if (!busy) ChooseBooks(); };
-            layout.Controls.Add(drop, 0, 2);
-
-            TableLayoutPanel content = Table(2);
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 275));
-            TableLayoutPanel fileArea = Table(1);
-            fileArea.RowCount = 2;
-            fileArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            fileArea.RowStyles.Add(new RowStyle(SizeType.Absolute, 77));
-            fileArea.Margin = new Padding(0, 0, 20, 0);
-            ConfigureGrid();
-            fileArea.Controls.Add(grid, 0, 0);
-            details.Dock = DockStyle.Fill; details.Multiline = true; details.ReadOnly = true; details.BorderStyle = BorderStyle.None;
-            details.BackColor = Pale; details.ForeColor = Muted; details.Font = new Font("Segoe UI", 9);
-            details.ScrollBars = ScrollBars.Vertical;
-            details.Text = L10n.T("Выберите книги FB2 или архивы ZIP, RAR, 7Z.");
-            Panel detailPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 9, 8, 8), BackColor = Pale, Margin = new Padding(0, 12, 0, 0) };
-            detailPanel.Controls.Add(details); fileArea.Controls.Add(detailPanel, 0, 1);
-            content.Controls.Add(fileArea, 0, 0);
-
-            BorderedPanel formatPanel = new BorderedPanel { Dock = DockStyle.Fill, Padding = new Padding(17, 16, 15, 10), BackColor = Pale };
-            TableLayoutPanel formatLayout = Table(1);
-            formatLayout.RowCount = 6;
-            foreach (int height in new int[] { 32, 28, 45, 28, 46 }) formatLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
-            formatLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            Label formatTitle = new Label { Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 10), ForeColor = Ink }; BindText(formatTitle, "ФОРМАТ ФАЙЛА");
-            azw3.Text = "AZW3"; azw3.Checked = true; azw3.Dock = DockStyle.Fill; azw3.Font = new Font("Segoe UI Semibold", 12); azw3.AutoSize = true;
-            epub.Text = "EPUB"; epub.Dock = DockStyle.Fill; epub.Font = azw3.Font; epub.AutoSize = true;
-            formatLayout.Controls.Add(formatTitle, 0, 0); formatLayout.Controls.Add(azw3, 0, 1);
-            formatLayout.Controls.Add(Description("Для переноса на Kindle\nпо USB."), 0, 2);
-            formatLayout.Controls.Add(epub, 0, 3);
-            formatLayout.Controls.Add(Description("Для отправки через\nAmazon Send to Kindle."), 0, 4);
-            BindText(formatHint, "Обложка, оглавление,\nиллюстрации и сноски."); formatHint.ForeColor = Muted; formatHint.Font = new Font("Segoe UI", 9); formatHint.Dock = DockStyle.Fill;
-            formatLayout.Controls.Add(formatHint, 0, 5);
-            formatPanel.Controls.Add(formatLayout); content.Controls.Add(formatPanel, 1, 0);
-            layout.Controls.Add(content, 0, 3);
-
-            TableLayoutPanel destination = Table(3);
-            destination.Margin = new Padding(0, 14, 0, 0);
-            destination.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 245));
-            destination.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            destination.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-            BindText(besideSource, "Рядом с исходной книгой"); besideSource.Checked = true; besideSource.Dock = DockStyle.Fill; besideSource.AutoSize = true;
-            outputFolder.ReadOnly = true; outputFolder.BackColor = Pale; outputFolder.BorderStyle = BorderStyle.FixedSingle;
-            outputFolder.Text = L10n.T("Папка каждой исходной книги"); outputFolder.Dock = DockStyle.Fill; outputFolder.Margin = new Padding(0, 16, 12, 0);
-            browse = Button("Выбрать папку…", false, 156); browse.Margin = new Padding(0, 13, 0, 0); browse.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            browse.Click += delegate { ChooseFolder(); };
-            besideSource.CheckedChanged += delegate { UpdateDestinationText(); };
-            destination.Controls.Add(besideSource, 0, 0); destination.Controls.Add(outputFolder, 1, 0); destination.Controls.Add(browse, 2, 0);
-            layout.Controls.Add(destination, 0, 4);
-
-            TableLayoutPanel actions = Table(2);
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 438));
-            SetStatus("Добавьте книги для конвертации"); status.Dock = DockStyle.Fill; status.TextAlign = ContentAlignment.MiddleLeft; status.ForeColor = Muted;
-            actions.Controls.Add(status, 0, 0);
-            FlowLayoutPanel buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 13, 0, 0), Margin = Padding.Empty };
-            convert = Button("Конвертировать", true, 180); convert.Enabled = false;
-            cancel = Button("Остановить", false, 116); cancel.Visible = false;
-            openFolder = Button("Папка результата", false, 165); openFolder.Enabled = false;
-            buttons.Controls.Add(convert); buttons.Controls.Add(cancel); buttons.Controls.Add(openFolder);
-            convert.Click += async delegate { await ConvertBooks(); };
-            cancel.Click += delegate { cancellation.Cancel(); cancel.Enabled = false; SetStatus("Остановка после текущей операции…"); };
-            openFolder.Click += delegate { OpenResultFolder(); };
-            actions.Controls.Add(buttons, 1, 0); layout.Controls.Add(actions, 0, 5);
-
-            TableLayoutPanel bottom = Table(2);
-            bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            Label privacy = new Label { ForeColor = Muted, Font = new Font("Segoe UI", 8), Dock = DockStyle.Fill }; BindText(privacy, "Книги обрабатываются на вашем компьютере");
-            progress.Dock = DockStyle.Fill; progress.Margin = new Padding(5, 4, 0, 6); progress.Style = ProgressBarStyle.Continuous;
-            bottom.Controls.Add(privacy, 0, 0); bottom.Controls.Add(progress, 1, 0); layout.Controls.Add(bottom, 0, 6);
-            AcceptButton = convert;
-            EnableDrop(this);
-            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (busy) { e.Cancel = true; cancellation.Cancel(); cancel.Enabled = false; SetStatus("Остановка… Затем окно можно закрыть."); } };
-            FormClosed += delegate { toolTips.Dispose(); };
-            RefreshCount();
-            RefreshLanguage();
-            float displayScale = CurrentAutoScaleDimensions.Width / 96f;
-            AutoScaleDimensions = new SizeF(96, 96);
-            ClientSize = new Size((int)Math.Round(1040 * displayScale), (int)Math.Round(730 * displayScale));
-            MinimumSize = new Size((int)Math.Round(900 * displayScale), (int)Math.Round(715 * displayScale));
+            UiSettings.Load();MiraTheme.Dark=UiSettings.Theme=="dark"||(UiSettings.Theme=="system"&&MiraTheme.SystemDark());
+            using(Graphics g=CreateGraphics())UiScale=g.DpiX/96f;
+            Font=new Font("Segoe UI",10);StartPosition=FormStartPosition.CenterScreen;Text="FB2 Kindle";KeyPreview=true;
+            try{Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);}catch{}
+            Rectangle work=Screen.FromControl(this).WorkingArea;
+            Size=new Size(Math.Min(S(1040),work.Width-S(24)),Math.Min(S(980),work.Height-S(24)));MinimumSize=new Size(Math.Min(S(900),work.Width-S(24)),Math.Min(S(740),work.Height-S(24)));MaximizedBounds=work;
+            SetupLabel(brand,"FB2 Kindle",15,true);SetupLabel(subtitle,"Книги для вашей читалки",9,false);
+            SetupLabel(heading,"Очередь книг",16,true);SetupLabel(count,"",9,false);SetupLabel(formats,"FB2 · ZIP · RAR · 7Z",9,false);
+            SetupLabel(formatTitle,"Формат результата",10,true);SetupLabel(saveTitle,"Сохранение",10,true);
+            SetupLabel(overallTitle,"",9,true);SetupLabel(overallPercent,"0%",9,false);SetupLabel(status,"",9,false);
+            SetupButton(logo,"","book",false,true);logo.Selected=true;logo.TabStop=false;
+            SetupButton(theme,"","theme",false,true);SetupButton(about,"","info",false,true);
+            SetupButton(minimize,"","minus",false,true);SetupButton(maximize,"","square",false,true);SetupButton(close,"","x",false,true);
+            SetupButton(add,"Добавить книги","plus",false,false);SetupButton(remove,"","trash",false,true);SetupButton(clear,"Очистить очередь",null,false,true);
+            SetupButton(drop,"Перетащите сюда книги или архивы","upload",false,false);drop.Dashed=true;
+            SetupButton(together,"В одну папку",null,false,false);SetupButton(beside,"Рядом с книгами",null,false,false);
+            together.Segment=beside.Segment=true;
+            SetupButton(browse,"","ellipsis",false,true);SetupButton(open,"Открыть","folder-open",false,false);
+            SetupButton(convert,"Конвертировать","play",true,false);SetupButton(cancel,"Остановить","stop",false,false);
+            azw3.Text="AZW3";epub.Text="EPUB";azw3.Font=epub.Font=new Font("Segoe UI Semibold",11);azw3.UiScale=epub.UiScale=UiScale;Controls.Add(azw3);Controls.Add(epub);
+            Controls.Add(queue);queue.UiScale=UiScale;queue.SelectionChanged+=delegate{RefreshActions();};queue.DeleteRequested+=RemoveBooks;queue.DetailsRequested+=ShowBookDetails;
+            outputFolder.BorderStyle=BorderStyle.None;outputFolder.Font=new Font("Segoe UI",10);outputFolder.Text=UiSettings.Folder;pathPanel.Controls.Add(outputFolder);pathPanel.Controls.Add(browse);Controls.Add(pathPanel);
+            Controls.Add(destinationModes);destinationModes.Controls.Add(together);destinationModes.Controls.Add(beside);Controls.Add(overall);
+            language.Font=new Font("Segoe UI",10);language.UiScale=UiScale;language.Quiet=true;Controls.Add(language);language.Click+=delegate{ShowLanguageMenu();};
+            lastFolder=UiSettings.Folder;azw3.Selected=UiSettings.Format=="AZW3";epub.Selected=!azw3.Selected;beside.Selected=UiSettings.Beside;together.Selected=!beside.Selected;
+            brand.MouseDown+=DragHeader;subtitle.MouseDown+=DragHeader;MouseDown+=delegate(object sender,MouseEventArgs e){if(e.Y<S(ClientSize.Height<S(740)?54:70))DragHeader(sender,e);};
+            theme.Click+=delegate{SetTheme(!MiraTheme.Dark,true);};about.Click+=delegate{using(AboutForm f=new AboutForm())f.ShowDialog(this);};minimize.Click+=delegate{WindowState=FormWindowState.Minimized;};maximize.Click+=delegate{ToggleMaximize();};close.Click+=delegate{Close();};
+            add.Click+=async delegate{await ChooseBooks();};drop.Click+=async delegate{if(!busy)await ChooseBooks();};remove.Click+=delegate{RemoveBooks();};clear.Click+=delegate{if(!busy){queue.Books.Clear();queue.Selected.Clear();queue.RefreshBooks();completedCount=0;SetStatus("Добавьте книги для конвертации");RefreshActions();RefreshProgress();}};
+            azw3.Click+=delegate{SetFormat("AZW3");};epub.Click+=delegate{SetFormat("EPUB");};together.Click+=delegate{SetDestination(false);};beside.Click+=delegate{SetDestination(true);};browse.Click+=delegate{ChooseFolder();};open.Click+=delegate{OpenResultFolder();};
+            outputFolder.TextChanged+=delegate{if(!initializing&&!beside.Selected){lastFolder=outputFolder.Text;UiSettings.Folder=lastFolder;if(!preview)UiSettings.Save();RefreshActions();}};
+            convert.Click+=async delegate{await ConvertBooks();};cancel.Click+=delegate{RequestStop();};EnableDrop(this);
+            KeyDown+=async delegate(object sender,KeyEventArgs e){if(e.Control&&e.KeyCode==Keys.O&&!busy){await ChooseBooks();e.Handled=true;}else if(e.KeyCode==Keys.F1){using(AboutForm f=new AboutForm())f.ShowDialog(this);e.Handled=true;}else if(e.KeyCode==Keys.Escape&&busy){RequestStop();e.Handled=true;}};
+            FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy){e.Cancel=true;RequestStop();SetStatus("Остановка… Затем окно можно закрыть.");}else if(!preview){UiSettings.Folder=lastFolder??"";UiSettings.Save();}};
+            MiraTheme.Changed+=ApplyTheme;initializing=false;RefreshLanguage();ApplyTheme();UpdateDestinationText();RefreshActions();
         }
-
-        static TableLayoutPanel Table(int columns)
+        int S(int value){return (int)Math.Round(value*UiScale);}
+        void SetupLabel(Label c,string text,float size,bool strong){c.Font=new Font(strong?"Segoe UI Semibold":"Segoe UI",size);c.TextAlign=ContentAlignment.MiddleLeft;c.AutoEllipsis=true;c.UseMnemonic=false;Controls.Add(c);if(text!="FB2 Kindle"&&!String.IsNullOrEmpty(text)&&text!="FB2 · ZIP · RAR · 7Z")captions[c]=text;c.Text=L10n.T(text);}
+        void SetupButton(MiraButton c,string text,string icon,bool primary,bool quiet){c.Font=new Font("Segoe UI",10);c.UiScale=UiScale;c.IconName=icon;c.Primary=primary;c.Quiet=quiet;c.ForeColor=MiraTheme.Text;Controls.Add(c);if(!String.IsNullOrEmpty(text))captions[c]=text;c.Text=L10n.T(text);}
+        void DragHeader(object sender,MouseEventArgs e){if(e.Button==MouseButtons.Left){if(e.Clicks==2)ToggleMaximize();else DragWindow();}}
+        void ToggleMaximize(){WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;maximize.IconName=WindowState==FormWindowState.Maximized?"restore":"square";PerformLayout();Invalidate(true);}
+        protected override void OnLayout(LayoutEventArgs e)
         {
-            TableLayoutPanel table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = columns, RowCount = 1, Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.Transparent };
-            if (columns == 1) table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            else table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            return table;
+            base.OnLayout(e);if(brand==null||initializing)return;int w=ClientSize.Width,h=ClientSize.Height,p=S(24),inner=w-p*2;bool shortHeight=h<S(740);
+            logo.SetBounds(p,S(shortHeight?13:20),S(shortHeight?28:34),S(shortHeight?28:34));brand.SetBounds(p+S(47),S(shortHeight?7:15),S(350),S(28));subtitle.SetBounds(p+S(47),S(shortHeight?31:40),S(350),S(20));
+            int chromeY=S(shortHeight?10:19),x=w-S(18);foreach(MiraButton b in new[]{close,maximize,minimize}){x-=S(36);b.SetBounds(x,chromeY,S(36),S(34));}x-=S(12);language.SetBounds(x-S(67),chromeY+S(3),S(62),S(28));x-=S(76);theme.SetBounds(x-S(34),chromeY,S(34),S(34));about.SetBounds(x-S(72),chromeY,S(34),S(34));
+            int headingY=S(shortHeight?64:88),toolbarY=S(shortHeight?96:124),toolbarH=S(shortHeight?34:38);
+            heading.SetBounds(p,headingY,S(245),S(29));int headingWidth=TextRenderer.MeasureText(heading.Text,heading.Font).Width;count.SetBounds(p+Math.Min(S(245),headingWidth)+S(10),headingY+S(3),S(120),S(24));
+            add.SetBounds(p,toolbarY,S(166),toolbarH);remove.SetBounds(p+S(174),toolbarY,S(38),toolbarH);clear.SetBounds(p+S(220),toolbarY,S(170),toolbarH);formats.SetBounds(w-p-S(180),toolbarY,S(180),toolbarH);formats.TextAlign=ContentAlignment.MiddleRight;
+            int settingsY=h-S(shortHeight?184:222),dropY=settingsY-S(shortHeight?40:48),queueY=S(shortHeight?142:174),queueH=Math.Min(S(672),Math.Max(1,dropY-S(shortHeight?8:12)-queueY));
+            queue.SetBounds(p,queueY,inner,queueH);drop.SetBounds(p,dropY,inner,S(shortHeight?28:34));
+            int colGap=S(22),col=(inner-colGap)/2,right=p+col+colGap;formatTitle.SetBounds(p,settingsY,col,S(24));saveTitle.SetBounds(right,settingsY,col,S(24));
+            int controlsY=settingsY+S(shortHeight?27:31),cardGap=S(8);azw3.SetBounds(p,controlsY,(col-cardGap)/2,S(shortHeight?64:88));epub.SetBounds(p+(col-cardGap)/2+cardGap,controlsY,(col-cardGap)/2,S(shortHeight?64:88));
+            destinationModes.SetBounds(right,controlsY,col,S(shortHeight?30:38));int modeWidth=(col-S(9))/2;together.SetBounds(S(3),S(3),modeWidth,S(shortHeight?24:32));beside.SetBounds(S(6)+modeWidth,S(3),modeWidth,S(shortHeight?24:32));
+            int openW=S(105),pathW=col-openW-S(8),pathY=controlsY+S(shortHeight?36:48),pathH=S(shortHeight?28:40);pathPanel.SetBounds(right,pathY,pathW,pathH);outputFolder.SetBounds(S(37),S(shortHeight?5:11),Math.Max(S(30),pathW-S(76)),S(shortHeight?20:22));browse.SetBounds(pathW-S(34),S(shortHeight?2:5),S(29),S(shortHeight?24:30));open.SetBounds(right+pathW+S(8),pathY,openW,pathH);
+            int foot=h-S(shortHeight?66:80),progressW=inner-S(342);overallTitle.SetBounds(p,foot+S(shortHeight?8:14),Math.Max(S(90),progressW-S(55)),S(21));overallPercent.SetBounds(p+progressW-S(50),foot+S(shortHeight?8:14),S(50),S(21));overallPercent.TextAlign=ContentAlignment.MiddleRight;overall.SetBounds(p,foot+S(shortHeight?32:40),progressW,S(shortHeight?5:6));status.SetBounds(p,foot+S(shortHeight?40:49),progressW,S(22));
+            cancel.SetBounds(w-p-S(320),foot+S(shortHeight?13:20),S(128),S(shortHeight?38:40));convert.SetBounds(w-p-S(182),foot+S(shortHeight?13:20),S(182),S(shortHeight?38:40));queue.RefreshBooks();
         }
-        Label Description(string text)
+        protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);bool shortHeight=ClientSize.Height<S(740);int header=S(shortHeight?54:70),footer=S(shortHeight?66:80);using(SolidBrush b=new SolidBrush(MiraTheme.Surface)){e.Graphics.FillRectangle(b,0,0,Width,header);e.Graphics.FillRectangle(b,0,Height-footer,Width,footer);}using(Pen p=new Pen(MiraTheme.Border)){e.Graphics.DrawLine(p,0,header,Width,header);e.Graphics.DrawLine(p,0,Height-footer,Width,Height-footer);e.Graphics.DrawRectangle(p,0,0,Width-1,Height-1);}}
+        void SetTheme(bool dark,bool save){MiraTheme.Set(dark);if(save&&!preview){UiSettings.Theme=dark?"dark":"light";UiSettings.Save();}}
+        void ApplyTheme(){BackColor=MiraTheme.Background;ForeColor=MiraTheme.Text;foreach(Control c in Controls){c.BackColor=MiraTheme.Background;c.ForeColor=c==subtitle||c==count||c==formats||c==overallPercent||c==status?MiraTheme.Muted:MiraTheme.Text;}outputFolder.BackColor=MiraTheme.Surface;outputFolder.ForeColor=beside.Selected?MiraTheme.Muted:MiraTheme.Text;pathPanel.BackColor=MiraTheme.Background;destinationModes.BackColor=MiraTheme.Soft;language.BackColor=MiraTheme.Surface;language.ForeColor=MiraTheme.Text;overall.BackColor=MiraTheme.Surface;overallTitle.BackColor=overallPercent.BackColor=status.BackColor=MiraTheme.Surface;brand.BackColor=subtitle.BackColor=MiraTheme.Surface;foreach(MiraButton b in new[]{theme,about,minimize,maximize,close,logo,language})b.BackColor=MiraTheme.Surface;browse.BackColor=cancel.BackColor=convert.BackColor=MiraTheme.Surface;open.BackColor=MiraTheme.Background;together.BackColor=beside.BackColor=MiraTheme.Soft;Invalidate(true);}
+        void SetFormat(string format){if(busy)return;azw3.Selected=format=="AZW3";epub.Selected=!azw3.Selected;azw3.Invalidate();epub.Invalidate();if(!preview){UiSettings.Format=format;UiSettings.Save();}}
+        void SetDestination(bool value){if(busy)return;beside.Selected=value;together.Selected=!value;UpdateDestinationText();if(!preview){UiSettings.Beside=value;UiSettings.Save();}}
+        void UpdateDestinationText(){initializing=true;outputFolder.ReadOnly=beside.Selected;outputFolder.Text=beside.Selected?L10n.T("Папка каждой исходной книги"):lastFolder??"";outputFolder.ForeColor=beside.Selected?MiraTheme.Muted:MiraTheme.Text;browse.Enabled=!busy&&!beside.Selected;beside.Invalidate();together.Invalidate();initializing=false;RefreshActions();}
+        void RefreshLanguage(){language.Text=L10n.LanguageCode=="zh"?"简中":L10n.LanguageCode.ToUpperInvariant();foreach(KeyValuePair<Control,string> pair in captions)pair.Key.Text=L10n.T(pair.Value);azw3.Subtitle=L10n.T("Для переноса по USB");epub.Subtitle=L10n.T("Для Send to Kindle");queue.AccessibleName=L10n.T("Очередь книг");language.AccessibleName=L10n.T("Язык интерфейса");SetTip(about,"О приложении");SetTip(theme,"Сменить тему");SetTip(minimize,"Свернуть");SetTip(maximize,"Развернуть");SetTip(close,"Закрыть");SetTip(remove,"Убрать выбранные");SetTip(browse,"Выбрать папку…");SetTip(open,"Папка результата");outputFolder.AccessibleName=L10n.T("Папка результата");together.AccessibleName=L10n.T("В одну папку");beside.AccessibleName=L10n.T("Рядом с книгами");SetStatus(statusKey,statusArgs);UpdateDestinationText();RefreshProgress();RefreshActions();queue.RefreshBooks();PerformLayout();Invalidate(true);}
+        void SetTip(Control c,string key){c.AccessibleName=L10n.T(key);tips.SetToolTip(c,L10n.T(key));}
+        void SetStatus(string key,params object[] args){statusKey=key;statusArgs=args;status.Text=String.Format(L10n.T(key),args);tips.SetToolTip(status,status.Text);}
+        void RefreshActions(){count.Text=L10n.BookCount(queue.Books.Count);add.Enabled=drop.Enabled=!busy;remove.Enabled=!busy&&queue.Selected.Count>0;clear.Enabled=!busy&&queue.Books.Count>0;convert.Enabled=!busy&&queue.Books.Count>0;cancel.Enabled=busy&&cancellation!=null&&!cancellation.IsCancellationRequested;language.Enabled=!busy;azw3.Enabled=epub.Enabled=!busy;together.Enabled=beside.Enabled=!busy;outputFolder.Enabled=!busy;browse.Enabled=!busy&&!beside.Selected;open.Enabled=!busy&&(!String.IsNullOrEmpty(lastResultDirectory)||(!beside.Selected&&Directory.Exists(lastFolder)));}
+        void RefreshProgress(){int n=queue.Books.Count,percent=n==0?0:queue.Books.Sum(delegate(BookItem b){return b.Processed?100:b.Percent;})/n;int done=queue.Books.Count(delegate(BookItem b){return b.State==BookState.Done||b.State==BookState.Warning;});overallTitle.Text=n==0?L10n.T("Общий прогресс"):String.Format(L10n.T("Готово {0} из {1} книг"),done,n);overall.Percent=percent;overallPercent.Text=percent+"%";overall.AccessibleName=L10n.T("Общий прогресс")+" "+percent+"%";overall.Invalidate();}
+        void EnableDrop(Control c){c.AllowDrop=true;c.DragEnter+=delegate(object s,DragEventArgs e){e.Effect=!busy&&e.Data.GetDataPresent(DataFormats.FileDrop)?DragDropEffects.Copy:DragDropEffects.None;};c.DragDrop+=async delegate(object s,DragEventArgs e){if(!busy&&e.Data.GetDataPresent(DataFormats.FileDrop))await AddBooksAsync((string[])e.Data.GetData(DataFormats.FileDrop));};foreach(Control child in c.Controls)EnableDrop(child);}
+        async Task ChooseBooks(){if(busy)return;using(OpenFileDialog d=new OpenFileDialog()){d.Title=L10n.T("Добавить книги");d.Filter=L10n.T("Книги и архивы|*.fb2;*.zip;*.rar;*.7z|Книги FB2|*.fb2|Архивы ZIP|*.zip|Архивы RAR|*.rar|Архивы 7Z|*.7z");d.Multiselect=true;if(d.ShowDialog(this)==DialogResult.OK)await AddBooksAsync(d.FileNames);}}
+        sealed class ScanResult {public List<BookItem> Books=new List<BookItem>();public List<string> Errors=new List<string>();}
+        static ScanResult ScanBooks(string[] files,CancellationToken token){ScanResult result=new ScanResult();foreach(string raw in files){token.ThrowIfCancellationRequested();try{string path=Path.GetFullPath(raw),ext=Path.GetExtension(path).ToLowerInvariant();if(!File.Exists(path))throw new FileNotFoundException(L10n.T("Файл не найден."));if(ext==".fb2")result.Books.Add(new BookItem{Source=path,Size=new FileInfo(path).Length});else if(ext==".zip"||ext==".rar"||ext==".7z"){foreach(ArchiveBook entry in ArchiveBooks.List(path,token))result.Books.Add(new BookItem{Source=path,Entry=entry,Size=entry.Size});}else throw new InvalidDataException(L10n.T("Поддерживаются FB2, ZIP, RAR и 7Z."));}catch(OperationCanceledException){throw;}catch(Exception error){result.Errors.Add(raw+"\r\n"+error.Message);}}return result;}
+        public void AddBooks(string[] files){if(!busy)AddScannedBooks(ScanBooks(files,CancellationToken.None));}
+        public async Task AddBooksAsync(string[] files){if(busy)return;cancellation=new CancellationTokenSource();busy=true;RefreshActions();SetStatus("Поиск книг в архивах…");try{ScanResult result=await Task.Run(delegate{return ScanBooks(files,cancellation.Token);});cancellation.Token.ThrowIfCancellationRequested();AddScannedBooks(result);}catch(OperationCanceledException){SetStatus("Добавление книг остановлено.");}catch(Exception error){SetStatus("Не удалось добавить книги.");ShowMessage(L10n.T("Не удалось добавить книги."),error.Message);}finally{busy=false;cancellation.Dispose();cancellation=null;RefreshActions();}}
+        void AddScannedBooks(ScanResult result){int added=0;foreach(BookItem b in result.Books){if(queue.Books.Exists(delegate(BookItem item){return String.Equals(item.Source,b.Source,StringComparison.OrdinalIgnoreCase)&&((item.Entry==null&&b.Entry==null)||(item.Entry!=null&&b.Entry!=null&&item.Entry.Index==b.Entry.Index));}))continue;if(queue.Books.Count>=10000){result.Errors.Add(L10n.T("В очередь можно добавить до 10000 книг за раз. Обработайте текущую очередь, затем очистите её."));break;}queue.Books.Add(b);added++;}queue.RefreshBooks();RefreshProgress();RefreshActions();SetStatus(result.Errors.Count>0?"Добавлено книг: {0}. Ошибок: {1}":"Добавлено книг: {0}",added,result.Errors.Count);if(result.Errors.Count>0)ShowMessage(L10n.T("Не удалось добавить книги."),String.Join("\r\n\r\n",result.Errors));}
+        void RemoveBooks(){if(busy)return;List<int> indices=queue.Selected.ToList();indices.Sort();indices.Reverse();foreach(int index in indices)if(index<queue.Books.Count)queue.Books.RemoveAt(index);queue.Selected.Clear();queue.RefreshBooks();RefreshActions();RefreshProgress();}
+        void ChooseFolder(){if(busy)return;using(FolderBrowserDialog d=new FolderBrowserDialog()){d.Description=L10n.T("Папка для готовых EPUB / AZW3");d.ShowNewFolderButton=true;if(Directory.Exists(lastFolder))d.SelectedPath=lastFolder;if(d.ShowDialog(this)==DialogResult.OK){lastFolder=d.SelectedPath;SetDestination(false);UiSettings.Folder=lastFolder;if(!preview)UiSettings.Save();}}}
+        void RequestStop(){if(cancellation==null)return;cancellation.Cancel();SetStatus("Остановка после текущей операции…");RefreshActions();}
+        string StageKey(ConversionStage stage){switch(stage){case ConversionStage.Extracting:return "Распаковка книги…";case ConversionStage.BuildingEpub:return "Создание EPUB…";case ConversionStage.ConvertingAzw3:return "Создание AZW3…";case ConversionStage.Saving:return "Сохранение файла…";default:return "Чтение FB2…";}}
+        public async Task ConvertBooks()
         {
-            Label label = new Label { ForeColor = Muted, Dock = DockStyle.Fill, Margin = new Padding(24, 0, 0, 0), Font = new Font("Segoe UI", 9) };
-            BindText(label, text); return label;
-        }
-        Label LabelAt(string text, Font font, Color color, int x, int y, int width, int height)
-        {
-            Label label = new Label { Font = font, ForeColor = color, Location = new Point(x, y), Size = new Size(width, height) };
-            BindText(label, text); return label;
-        }
-        Button Button(string text, bool primary, int width)
-        {
-            Button button = primary ? new PrimaryButton() : new Button();
-            BindText(button, text); button.Width = width; button.Height = 38; button.FlatStyle = FlatStyle.Flat;
-            button.BackColor = primary ? Blue : Color.White; button.ForeColor = primary ? Color.White : Ink;
-            button.Cursor = Cursors.Hand; button.Margin = new Padding(0, 0, 9, 0);
-            button.UseVisualStyleBackColor = false; button.Font = new Font("Segoe UI Semibold", 9);
-            button.FlatAppearance.BorderColor = primary ? Blue : Line; button.FlatAppearance.BorderSize = 1;
-            button.FlatAppearance.MouseOverBackColor = primary ? ColorTranslator.FromHtml("#004EEB") : Pale;
-            button.FlatAppearance.MouseDownBackColor = primary ? ColorTranslator.FromHtml("#0040C1") : Line;
-            return button;
-        }
-
-        void BindText(Control control, string russian)
-        {
-            captions[control] = russian; control.Text = L10n.T(russian);
-        }
-        void SetStatus(string russian, params object[] arguments)
-        {
-            statusTemplate = russian; statusArguments = arguments;
-            status.Text = String.Format(L10n.T(russian), arguments);
-        }
-        void UpdateDestinationText()
-        {
-            outputFolder.Text = besideSource.Checked ? L10n.T("Папка каждой исходной книги") : (lastFolder ?? L10n.T("Выберите папку сохранения"));
-        }
-        static void SetRowState(DataGridViewRow row, string russian)
-        {
-            row.Cells[2].Tag = russian; row.Cells[2].Value = L10n.T(russian);
-        }
-        void RefreshLanguage()
-        {
-            SuspendLayout();
-            foreach (KeyValuePair<Control, string> caption in captions) caption.Key.Text = L10n.T(caption.Value);
-            grid.Columns[0].HeaderText = L10n.T("КНИГА"); grid.Columns[1].HeaderText = L10n.T("РАЗМЕР"); grid.Columns[2].HeaderText = L10n.T("СТАТУС");
-            foreach (DataGridViewRow row in grid.Rows)
-            {
-                string original = row.Cells[2].Tag as string;
-                if (original != null) row.Cells[2].Value = L10n.T(original);
-                BookItem book = row.Tag as BookItem;
-                if (book != null)
-                {
-                    row.Cells[1].Value = FormatBytes(book.Size);
-                    row.Cells[0].ToolTipText = book.SourceDescription;
-                    if (original == "Остановлено") row.Cells[2].ToolTipText = L10n.T("Конвертация остановлена.") + "\r\n" + book.SourceDescription;
-                }
-            }
-            queueCount.Text = String.Format(L10n.T("{0} В ОЧЕРЕДИ"), grid.Rows.Count);
-            status.Text = String.Format(L10n.T(statusTemplate), statusArguments);
-            about.AccessibleName = L10n.T("О приложении"); toolTips.SetToolTip(about, L10n.T("О приложении"));
-            languagePicker.AccessibleName = L10n.T("Язык интерфейса"); toolTips.SetToolTip(languagePicker, L10n.T("Язык интерфейса"));
-            UpdateDestinationText(); drop.Invalidate(); ShowDetails();
-            ResumeLayout(true);
-        }
-
-        void ConfigureGrid()
-        {
-            grid.Dock = DockStyle.Fill; grid.Margin = Padding.Empty; grid.ReadOnly = true; grid.AllowUserToAddRows = false;
-            grid.AllowUserToDeleteRows = false; grid.AllowUserToResizeRows = false; grid.RowHeadersVisible = false;
-            grid.MultiSelect = true; grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; grid.BackgroundColor = Color.White;
-            grid.BorderStyle = BorderStyle.None; grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal; grid.GridColor = Line;
-            grid.EnableHeadersVisualStyles = false; grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-            grid.ColumnHeadersDefaultCellStyle.BackColor = Pale; grid.ColumnHeadersDefaultCellStyle.ForeColor = Muted;
-            grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 9); grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(8, 0, 0, 0);
-            grid.ColumnHeadersHeight = 37; grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            grid.DefaultCellStyle.Font = new Font("Segoe UI", 9); grid.DefaultCellStyle.Padding = new Padding(8, 0, 0, 0);
-            grid.DefaultCellStyle.SelectionBackColor = ColorTranslator.FromHtml("#EFF4FF"); grid.DefaultCellStyle.SelectionForeColor = Ink;
-            grid.RowTemplate.Height = 43;
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "file", HeaderText = L10n.T("КНИГА"), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 65, SortMode = DataGridViewColumnSortMode.NotSortable });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "size", HeaderText = L10n.T("РАЗМЕР"), Width = 86, SortMode = DataGridViewColumnSortMode.NotSortable });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "state", HeaderText = L10n.T("СТАТУС"), Width = 149, SortMode = DataGridViewColumnSortMode.NotSortable });
-            grid.SelectionChanged += delegate { ShowDetails(); };
-            grid.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Delete && !busy) { RemoveBooks(); e.Handled = true; } };
-        }
-
-        void EnableDrop(Control control)
-        {
-            control.AllowDrop = true;
-            control.DragEnter += delegate(object sender, DragEventArgs e) { e.Effect = !busy && e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; if (!busy) drop.Highlight = true; };
-            control.DragLeave += delegate { drop.Highlight = false; };
-            control.DragDrop += async delegate(object sender, DragEventArgs e) { drop.Highlight = false; if (!busy && e.Data.GetDataPresent(DataFormats.FileDrop)) await AddBooksAsync((string[])e.Data.GetData(DataFormats.FileDrop)); };
-            foreach (Control child in control.Controls) EnableDrop(child);
-        }
-
-        async void ChooseBooks()
-        {
-            using (OpenFileDialog dialog = new OpenFileDialog())
-            {
-                dialog.Title = L10n.T("Добавить книги"); dialog.Filter = L10n.T("Книги и архивы|*.fb2;*.zip;*.rar;*.7z|Книги FB2|*.fb2|Архивы ZIP|*.zip|Архивы RAR|*.rar|Архивы 7Z|*.7z");
-                dialog.Multiselect = true; if (dialog.ShowDialog(this) == DialogResult.OK) await AddBooksAsync(dialog.FileNames);
-            }
-        }
-
-        public void AddBooks(string[] files)
-        {
-            if (busy) return;
-            AddScannedBooks(ScanBooks(files, CancellationToken.None));
-        }
-
-        public async Task AddBooksAsync(string[] files)
-        {
-            if (busy) return;
-            cancellation = new CancellationTokenSource(); SetBusy(true);
-            SetStatus("Поиск книг в архивах…");
-            progress.Style = ProgressBarStyle.Marquee;
+            if(busy||queue.Books.Count==0)return;string directory=beside.Selected?null:lastFolder;
+            if(!beside.Selected&&String.IsNullOrWhiteSpace(directory)){ChooseFolder();if(beside.Selected||String.IsNullOrWhiteSpace(lastFolder))return;directory=lastFolder;}
+            if(directory!=null&&!Directory.Exists(directory)){SetStatus("Папка сохранения больше не существует.");return;}
+            string extension=azw3.Selected?".azw3":".epub";if(extension==".azw3"&&KindleConverter.FindCalibre()==null){SetStatus("Для AZW3 не найден необходимый компонент. Переустановите программу.");return;}
+            cancellation=new CancellationTokenSource();busy=true;completedCount=0;RefreshActions();int good=0,failed=0;bool stopped=false;
+            foreach(BookItem b in queue.Books){b.Percent=0;b.Processed=false;b.State=BookState.Waiting;b.StageKey="Ожидает своей очереди";}RefreshProgress();queue.Invalidate();
             try
             {
-                ScanResult scanned = await Task.Run(delegate { return ScanBooks(files, cancellation.Token); });
-                cancellation.Token.ThrowIfCancellationRequested();
-                AddScannedBooks(scanned);
-            }
-            catch (OperationCanceledException) { SetStatus("Добавление книг остановлено."); }
-            catch (Exception error) { SetStatus("Не удалось добавить книги."); details.Text = error.Message; }
-            finally { progress.Style = ProgressBarStyle.Continuous; SetBusy(false); cancellation.Dispose(); cancellation = null; }
-        }
-
-        static ScanResult ScanBooks(string[] files, CancellationToken token)
-        {
-            ScanResult result = new ScanResult();
-            foreach (string rawPath in files)
-            {
-                token.ThrowIfCancellationRequested();
-                try
+                foreach(BookItem book in queue.Books)
                 {
-                    string path = Path.GetFullPath(rawPath); string extension = Path.GetExtension(path).ToLowerInvariant();
-                    if (!File.Exists(path)) throw new FileNotFoundException(L10n.T("Файл не найден."));
-                    if (extension == ".fb2") result.Books.Add(new BookItem { Source = path, Size = new FileInfo(path).Length });
-                    else if (extension == ".zip" || extension == ".rar" || extension == ".7z")
-                    {
-                        foreach (ArchiveBook entry in ArchiveBooks.List(path, token)) result.Books.Add(new BookItem { Source = path, Entry = entry, Size = entry.Size });
-                    }
-                    else throw new InvalidDataException(L10n.T("Поддерживаются FB2, ZIP, RAR и 7Z."));
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception error) { result.Errors.Add(rawPath + "\r\n" + error.Message); }
-            }
-            return result;
-        }
-
-        void AddScannedBooks(ScanResult scanned)
-        {
-            int added = 0;
-            grid.SuspendLayout();
-            try
-            {
-                foreach (BookItem book in scanned.Books)
-                {
-                    if (books.Exists(delegate(BookItem item) { return String.Equals(item.Source, book.Source, StringComparison.OrdinalIgnoreCase) &&
-                        ((item.Entry == null && book.Entry == null) || (item.Entry != null && book.Entry != null && item.Entry.Index == book.Entry.Index)); })) continue;
-                    if (books.Count >= 10000) { scanned.Errors.Add(L10n.T("В очередь можно добавить до 10000 книг за раз. Обработайте текущую очередь, затем очистите её.")); break; }
-                    int row = grid.Rows.Add(book.FileName, FormatBytes(book.Size), L10n.T("Ожидает"));
-                    book.Row = grid.Rows[row]; book.Row.Tag = book; book.Row.Cells[0].ToolTipText = book.SourceDescription;
-                    SetRowState(book.Row, "Ожидает");
-                    books.Add(book); added++;
-                }
-            }
-            finally { grid.ResumeLayout(); }
-            RefreshCount();
-            if (scanned.Errors.Count > 0) SetStatus("Добавлено книг: {0}. Ошибок: {1}", added, scanned.Errors.Count);
-            else SetStatus("Добавлено книг: {0}", added);
-            ShowDetails();
-            if (scanned.Errors.Count > 0) details.Text = String.Join("\r\n\r\n", scanned.Errors);
-        }
-
-        void RemoveBooks()
-        {
-            if (busy) return;
-            List<BookItem> removeList = new List<BookItem>();
-            foreach (DataGridViewRow row in grid.SelectedRows) if (row.Tag is BookItem) removeList.Add((BookItem)row.Tag);
-            foreach (BookItem book in removeList) { books.Remove(book); grid.Rows.Remove(book.Row); }
-            RefreshCount(); ShowDetails();
-        }
-
-        void RefreshCount()
-        {
-            queueCount.Text = String.Format(L10n.T("{0} В ОЧЕРЕДИ"), books.Count); convert.Enabled = !busy && books.Count > 0;
-            remove.Enabled = !busy && books.Count > 0; clear.Enabled = !busy && books.Count > 0;
-        }
-
-        void ShowDetails()
-        {
-            if (grid.SelectedRows.Count == 0) { details.Text = L10n.T("Выберите книгу, чтобы увидеть путь и результат."); return; }
-            BookItem book = grid.SelectedRows[0].Tag as BookItem;
-            if (book == null) return;
-            string state = book.Row.Cells[2].Tag as string;
-            details.Text = state == "Остановлено" ? L10n.T("Конвертация остановлена.") + "\r\n" + book.SourceDescription : String.IsNullOrEmpty(book.Detail) ? book.SourceDescription : book.Detail;
-        }
-
-        void ChooseFolder()
-        {
-            using (FolderBrowserDialog dialog = new FolderBrowserDialog())
-            {
-                dialog.Description = L10n.T("Папка для готовых EPUB / AZW3"); dialog.ShowNewFolderButton = true;
-                if (!String.IsNullOrEmpty(lastFolder) && Directory.Exists(lastFolder)) dialog.SelectedPath = lastFolder;
-                if (dialog.ShowDialog(this) == DialogResult.OK) { lastFolder = dialog.SelectedPath; besideSource.Checked = false; outputFolder.Text = lastFolder; }
-            }
-        }
-
-        async Task ConvertBooks()
-        {
-            if (busy || books.Count == 0) return;
-            string directory = besideSource.Checked ? null : lastFolder;
-            if (directory != null && !Directory.Exists(directory)) { SetStatus("Папка сохранения больше не существует."); return; }
-            if (!besideSource.Checked && directory == null) { ChooseFolder(); if (besideSource.Checked || lastFolder == null) return; directory = lastFolder; }
-            string extension = azw3.Checked ? ".azw3" : ".epub";
-            if (extension == ".azw3" && KindleConverter.FindCalibre() == null) { SetStatus("Для AZW3 не найден необходимый компонент. Переустановите программу."); return; }
-            cancellation = new CancellationTokenSource(); SetBusy(true);
-            int successful = 0, failed = 0; bool stopped = false;
-            progress.Maximum = books.Count; progress.Value = 0;
-            try
-            {
-                foreach (BookItem book in books)
-                {
-                    if (cancellation.IsCancellationRequested) { stopped = true; break; }
-                    book.Output = null; book.Detail = book.SourceDescription;
-                    SetRowState(book.Row, "Обработка…"); book.Row.Cells[2].Style.ForeColor = Blue;
-                    SetStatus("Книга {0} из {1}", successful + failed + 1, books.Count);
-                    string targetDirectory = directory ?? Path.GetDirectoryName(book.Source);
+                    if(cancellation.IsCancellationRequested){stopped=true;break;}
+                    book.Output=null;book.Detail=book.SourceDescription;book.State=BookState.Working;book.StageKey="Чтение FB2…";queue.EnsureBookVisible(queue.Books.IndexOf(book));queue.Invalidate();SetStatus("Книга {0} из {1}",completedCount+1,queue.Books.Count);
+                    string target=directory??Path.GetDirectoryName(book.Source);
                     try
                     {
-                        string output = KindleConverter.AvailableOutput(book.Entry == null ? book.Source : book.FileName, targetDirectory, extension);
-                        ConversionResult result = await Task.Run(delegate { return KindleConverter.Convert(book.Source, book.Entry, output, cancellation.Token); });
-                        book.Output = output; lastResultDirectory = targetDirectory;
-                        book.Detail = result.Title + (String.IsNullOrEmpty(result.Author) ? "" : " · " + result.Author) + "\r\n" + output;
-                        if (result.Warnings.Count > 0) book.Detail += "\r\n" + String.Join("\r\n", result.Warnings);
-                        SetRowState(book.Row, result.Warnings.Count > 0 ? "Готово · замечания" : "Готово");
-                        book.Row.Cells[2].Style.ForeColor = result.Warnings.Count > 0 ? ColorTranslator.FromHtml("#B54708") : ColorTranslator.FromHtml("#067647");
-                        successful++;
+                        string output=KindleConverter.AvailableOutput(book.Entry==null?book.Source:book.FileName,target,extension);
+                        Action<ConversionProgress> report=delegate(ConversionProgress p){if(IsDisposed||!IsHandleCreated)return;try{BeginInvoke((Action)delegate{if(!busy||book.State!=BookState.Working)return;book.Percent=Math.Max(book.Percent,Math.Min(99,p.Percent));book.StageKey=StageKey(p.Stage);queue.Invalidate();RefreshProgress();});}catch(InvalidOperationException){} };
+                        ConversionResult result=await Task.Run(delegate{return KindleConverter.Convert(book.Source,book.Entry,output,cancellation.Token,report);});
+                        book.Output=output;book.Title=result.Title;book.Author=result.Author;book.ResultFormat=extension.Substring(1).ToUpperInvariant();book.Percent=100;book.Processed=true;book.State=result.Warnings.Count>0?BookState.Warning:BookState.Done;book.Detail=result.Title+(String.IsNullOrEmpty(result.Author)?"":" · "+result.Author)+"\r\n"+output+(result.Warnings.Count==0?"":"\r\n"+String.Join("\r\n",result.Warnings));lastResultDirectory=target;good++;
                     }
-                    catch (OperationCanceledException) { SetRowState(book.Row, "Остановлено"); book.Detail = L10n.T("Конвертация остановлена.") + "\r\n" + book.SourceDescription; book.Row.Cells[2].ToolTipText = book.Detail; stopped = true; break; }
-                    catch (Exception error) { SetRowState(book.Row, "Ошибка"); book.Row.Cells[2].Style.ForeColor = ColorTranslator.FromHtml("#B42318"); book.Detail = error.Message + "\r\n" + book.SourceDescription; failed++; }
-                    book.Row.Cells[2].ToolTipText = book.Detail; progress.Value = successful + failed; ShowDetails();
+                    catch(OperationCanceledException){book.State=BookState.Stopped;book.StageKey="Остановлено";book.Detail=L10n.T("Конвертация остановлена.")+"\r\n"+book.SourceDescription;stopped=true;break;}
+                    catch(Exception error){book.State=BookState.Error;book.StageKey="Ошибка";book.Processed=true;book.Detail=error.Message+"\r\n"+book.SourceDescription;failed++;}
+                    completedCount++;RefreshProgress();queue.Invalidate();
                 }
-                if (failed > 0) SetStatus(stopped ? "Остановлено. Готово: {0}. Ошибок: {1}" : "Готово: {0}. Ошибок: {1}", successful, failed);
-                else SetStatus(stopped ? "Остановлено. Готово: {0}" : "Готово: {0}", successful);
-                openFolder.Enabled = lastResultDirectory != null;
+                if(failed>0)SetStatus(stopped?"Остановлено. Готово: {0}. Ошибок: {1}":"Готово: {0}. Ошибок: {1}",good,failed);else SetStatus(stopped?"Остановлено. Готово: {0}":"Готово: {0}",good);
             }
-            finally { SetBusy(false); cancellation.Dispose(); cancellation = null; ShowDetails(); }
+            finally{busy=false;cancellation.Dispose();cancellation=null;RefreshProgress();RefreshActions();queue.Invalidate();}
         }
-
-        string lastResultDirectory;
-        void OpenResultFolder()
+        void OpenResultFolder(){string folder=!beside.Selected&&Directory.Exists(lastFolder)?lastFolder:lastResultDirectory;BookItem selected=queue.FirstSelected;if(selected!=null&&selected.Output!=null)folder=Path.GetDirectoryName(selected.Output);if(folder==null)return;try{Process.Start(new ProcessStartInfo(folder){UseShellExecute=true});}catch(Exception e){SetStatus("Не удалось открыть папку: {0}",e.Message);}}
+        void ShowBookDetails(){BookItem b=queue.FirstSelected;if(b!=null)ShowMessage(b.FileName,b.AllDetails);}
+        void ShowMessage(string title,string text){using(MiraMessage f=new MiraMessage(title,text))f.ShowDialog(this);}
+        public void Preview(){Preview("ru",MiraTheme.Dark?"dark":"light",4);}
+        public void Preview(string lang,string themeName,int number)
         {
-            string folder = lastResultDirectory;
-            if (grid.SelectedRows.Count > 0)
+            preview=true;L10n.SetLanguage(lang);MiraTheme.Dark=themeName=="dark";lastFolder=@"D:\Books\Kindle";beside.Selected=false;together.Selected=true;azw3.Selected=true;epub.Selected=false;
+            queue.Books.Clear();string[] names=lang=="ru"?new[]{"Путешествие к северному маяку.fb2","Сборник историй.fb2","Двадцать тысяч лье под водой.fb2","Затерянный мир.fb2"}:lang=="zh"?new[]{"北方灯塔之旅.fb2","短篇故事集.fb2","海底两万里.fb2","失落的世界.fb2"}:new[]{"Journey to the northern lighthouse.fb2","Collected stories.fb2","Twenty Thousand Leagues Under the Seas.fb2","The Lost World.fb2"};
+            for(int i=0;i<number;i++){BookItem b=new BookItem{Source=@"D:\Books\"+(i<names.Length?names[i]:"Book "+(i+1)+".fb2"),Size=862208+i*234567,Author=i==0?(lang=="ru"?"Алексей Северный":lang=="zh"?"阿列克谢·谢韦尔尼":"Alexey Severny"):"",State=i==0?BookState.Done:i==1?BookState.Working:BookState.Waiting,Percent=i==0?100:i==1?64:0,Processed=i==0,ResultFormat="AZW3",StageKey=i==1?"Создание AZW3…":"Ожидает своей очереди"};queue.Books.Add(b);}
+            if(number<7)ClientSize=new Size(ClientSize.Width,Math.Min(ClientSize.Height,S(454+Math.Max(1,number)*96)));
+            RefreshLanguage();SetStatus("Книга {0} из {1}",2,number);ApplyTheme();RefreshProgress();queue.RefreshBooks();RefreshActions();
+        }
+        public string VerifyUi()
+        {
+            PerformLayout();List<BookItem> old=new List<BookItem>(queue.Books);List<string> checks=new List<string>();
+            if(MiraWindow.DecodeHitPoint(new IntPtr(0x00000000FFECFFF0L))!=new Point(-16,-20))throw new InvalidOperationException("Negative monitor coordinates did not decode");checks.Add("negativeMonitorCoordinates=PASS");
+            queue.Books.Clear();queue.Books.Add(new BookItem{Source="Done.fb2",Percent=100,Processed=true,State=BookState.Done});queue.Books.Add(new BookItem{Source="Working.fb2",Percent=99,State=BookState.Working});RefreshProgress();if(overall.Percent!=99)throw new InvalidOperationException("Overall progress reached 100 before completion");checks.Add("pending99Overall=99");queue.Books[1].Processed=true;queue.Books[1].State=BookState.Done;queue.Books[1].Percent=100;RefreshProgress();if(overall.Percent!=100)throw new InvalidOperationException("Completed overall progress is not 100");checks.Add("completeOverall=100");
+            foreach(int n in new[]{7,8,40}){queue.Books.Clear();for(int i=0;i<n;i++)queue.Books.Add(new BookItem{Source="Book "+i+".fb2"});queue.AutoScrollPosition=Point.Empty;queue.RefreshBooks();bool needs=queue.VerticalScroll.Visible;checks.Add("queue"+n+".scroll="+needs);if(n==7&&queue.Height>=S(448)&&needs)throw new InvalidOperationException("Seven rows unexpectedly scroll");if(n>7&&!needs)throw new InvalidOperationException("Large queue must scroll");if(n==40){queue.EnsureBookVisible(8);if(queue.AutoScrollPosition.Y>=0)throw new InvalidOperationException("Active book did not scroll");checks.Add("autoScroll="+queue.AutoScrollPosition.Y);}}
+            Rectangle headerBounds=brand.Bounds,settingsBounds=azw3.Bounds,footerBounds=convert.Bounds;checks.Add(queue.VerifyNavigation());if(headerBounds!=brand.Bounds||settingsBounds!=azw3.Bounds||footerBounds!=convert.Bounds)throw new InvalidOperationException("Scrolling moved fixed UI");checks.Add("fixedHeaderSettingsFooter=PASS");
+            queue.Books.Clear();queue.Books.AddRange(old);queue.Selected.Clear();queue.AutoScrollPosition=Point.Empty;queue.RefreshBooks();if(azw3.Bottom!=pathPanel.Bottom||azw3.Top!=destinationModes.Top)throw new InvalidOperationException("Settings groups are not aligned");
+            foreach(Control c in new Control[]{queue,drop,azw3,epub,pathPanel,open,convert,cancel,language})if(c.Left<0||c.Right>ClientSize.Width||c.Bottom>ClientSize.Height)throw new InvalidOperationException("Clipped control: "+c.GetType().Name);
+            VerifyNoOverlap();checks.Add("pairwiseNoOverlap=PASS");checks.Add(VerifyShortHeights());checks.Add(VerifyMenus());RefreshProgress();RefreshActions();checks.Add("alignment=PASS");checks.Add("bounds=PASS");checks.Add("language="+L10n.LanguageCode);checks.Add("theme="+(MiraTheme.Dark?"dark":"light"));return String.Join("\r\n",checks);
+        }
+        void VerifyNoOverlap()
+        {
+            Control[] controls={heading,add,queue,drop,formatTitle,saveTitle,azw3,epub,destinationModes,pathPanel,open,overallTitle,overallPercent,overall,status,cancel,convert};
+            for(int i=0;i<controls.Length;i++)for(int j=i+1;j<controls.Length;j++)if(controls[i].Bounds.IntersectsWith(controls[j].Bounds))throw new InvalidOperationException("Overlapping controls: "+controls[i].GetType().Name+" / "+controls[j].GetType().Name);
+            if(outputFolder.Bottom>pathPanel.ClientSize.Height||browse.Bottom>pathPanel.ClientSize.Height)throw new InvalidOperationException("Output controls are clipped");
+        }
+        string VerifyShortHeights()
+        {
+            float previousScale=UiScale;Size previousSize=ClientSize,previousMinimum=MinimumSize;List<string> checks=new List<string>();
+            try
             {
-                BookItem book = grid.SelectedRows[0].Tag as BookItem;
-                if (book != null && book.Output != null) folder = Path.GetDirectoryName(book.Output);
-            }
-            if (folder == null) return;
-            try { Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true }); }
-            catch (Exception error) { SetStatus("Не удалось открыть папку: {0}", error.Message); }
-        }
-        void SetBusy(bool value)
-        {
-            busy = value; add.Enabled = !value; browse.Enabled = !value; besideSource.Enabled = !value; languagePicker.Enabled = !value;
-            azw3.Enabled = !value; epub.Enabled = !value; drop.Enabled = !value;
-            cancel.Visible = value; cancel.Enabled = value; openFolder.Visible = !value;
-            RefreshCount();
-        }
-
-        public void Preview()
-        {
-            int row = grid.Rows.Add("Путешествие к северному маяку.fb2", FormatBytes(862208), L10n.T("Готово"));
-            SetRowState(grid.Rows[row], "Готово");
-            grid.Rows[row].Cells[2].Style.ForeColor = ColorTranslator.FromHtml("#067647");
-            row = grid.Rows.Add("Сборник рассказов.fb2.zip", FormatBytes(1468006), L10n.T("Ожидает")); SetRowState(grid.Rows[row], "Ожидает");
-            row = grid.Rows.Add("Краткая история времени.fb2", FormatBytes(2936013), L10n.T("Ожидает")); SetRowState(grid.Rows[row], "Ожидает");
-            queueCount.Text = String.Format(L10n.T("{0} В ОЧЕРЕДИ"), 3); SetStatus("Книги готовы к конвертации");
-            details.Text = "Путешествие к северному маяку · Алексей Северный\r\n" + String.Format(L10n.T("Готовый файл: {0}"), "Путешествие к северному маяку.azw3");
-            convert.Enabled = true; clear.Enabled = true; remove.Enabled = true;
-            progress.Maximum = 3; progress.Value = 1;
-        }
-
-        static string FormatBytes(long bytes)
-        { return bytes >= 1048576 ? (bytes / 1048576.0).ToString("0.0") + " " + L10n.T("МБ") : Math.Max(1, bytes / 1024).ToString() + " " + L10n.T("КБ"); }
-        static Icon MakeIcon()
-        {
-            using (Bitmap bitmap = new Bitmap(32, 32))
-            using (Graphics graphics = Graphics.FromImage(bitmap))
-            {
-                graphics.Clear(Blue);
-                using (Pen pen = new Pen(Color.White, 2)) { graphics.DrawRectangle(pen, 8, 5, 16, 22); graphics.DrawLine(pen, 12, 11, 20, 11); graphics.DrawLine(pen, 12, 16, 20, 16); graphics.DrawLine(pen, 12, 21, 17, 21); }
-                IntPtr handle = bitmap.GetHicon();
-                try { using (Icon icon = Icon.FromHandle(handle)) return (Icon)icon.Clone(); }
-                finally { DestroyIcon(handle); }
-            }
-        }
-        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr handle);
-        class LanguageChoice
-        {
-            public readonly string Code;
-            readonly string name;
-            public LanguageChoice(string code, string name) { Code = code; this.name = name; }
-            public override string ToString() { return name; }
-        }
-        class ScanResult { public List<BookItem> Books = new List<BookItem>(); public List<string> Errors = new List<string>(); }
-        class BookItem
-        {
-            public string Source; public ArchiveBook Entry; public long Size; public string Output; public string Detail; public DataGridViewRow Row;
-            public string FileName
-            {
-                get
+                MinimumSize=Size.Empty;
+                foreach(float scale in new[]{1.25f,1.5f})
                 {
-                    if (Entry == null) return Path.GetFileName(Source);
-                    string name = Entry.EntryName.Replace('\\', '/');
-                    return name.Substring(name.LastIndexOf('/') + 1);
+                    UiScale=scale;queue.UiScale=scale;foreach(Control control in Controls){MiraButton button=control as MiraButton;if(button!=null)button.UiScale=scale;}together.UiScale=beside.UiScale=browse.UiScale=scale;
+                    ClientSize=new Size(S(1040),698);PerformLayout();VerifyNoOverlap();if(queue.Height<S(64))throw new InvalidOperationException("Short layout cannot show a complete book row");
+                    foreach(Control c in new Control[]{heading,formatTitle,saveTitle,overallTitle,status,together,beside,convert,cancel})if(c.Height<(int)Math.Ceiling(c.Font.Height*scale/previousScale))throw new InvalidOperationException("Short layout clips a caption: "+c.Text);
+                    checks.Add("shortHeight698.scale"+scale.ToString(System.Globalization.CultureInfo.InvariantCulture)+"=PASS;queueHeight="+queue.Height);
                 }
             }
-            public string SourceDescription { get { return Source + (Entry == null ? "" : "\r\n" + String.Format(L10n.T("Книга в архиве: {0}"), Entry.EntryName)); } }
+            finally{UiScale=previousScale;queue.UiScale=previousScale;foreach(Control control in Controls){MiraButton button=control as MiraButton;if(button!=null)button.UiScale=previousScale;}together.UiScale=beside.UiScale=browse.UiScale=previousScale;ClientSize=previousSize;MinimumSize=previousMinimum;PerformLayout();}
+            return String.Join("\r\n",checks);
         }
-
-        class BorderedPanel : Panel
+        string VerifyMenus()
         {
-            public BorderedPanel() { DoubleBuffered = true; }
-            protected override void OnPaint(PaintEventArgs e) { base.OnPaint(e); using (Pen pen = new Pen(Line)) e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1); }
-        }
-        class PrimaryButton : Button
-        {
-            bool hovered, mousePressed, keyboardPressed;
-            public PrimaryButton()
+            string previousLanguage=L10n.LanguageCode;Exception threadError=null;ThreadExceptionEventHandler handler=delegate(object sender,ThreadExceptionEventArgs args){threadError=args.Exception;};Application.ThreadException+=handler;
+            try
             {
-                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+                ShowLanguageMenu();Application.DoEvents();((ToolStripMenuItem)languageMenu.Items[1]).PerformClick();languageMenu.Close();Application.DoEvents();if(L10n.LanguageCode!="en"||languageMenu.IsDisposed)throw new InvalidOperationException("English menu selection failed");
+                ShowLanguageMenu();Application.DoEvents();languageMenu.Items[2].Select();languageMenu.VerifyEnter();Application.DoEvents();if(L10n.LanguageCode!="zh"||languageMenu.IsDisposed)throw new InvalidOperationException("Language menu Enter selection failed");
+                using(AboutForm dialog=new AboutForm()){dialog.StartPosition=FormStartPosition.Manual;dialog.Location=new Point(-30000,-30000);dialog.Show(this);Application.DoEvents();dialog.VerifyDocumentMenu();dialog.Close();}
+                if(threadError!=null)throw new InvalidOperationException("Menu interaction raised an application-thread exception",threadError);
             }
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                // Draw the caption explicitly: native themes can replace a button's ForeColor.
-                bool pressed = keyboardPressed || (mousePressed && hovered);
-                Color background = !Enabled ? Pale : pressed ? ColorTranslator.FromHtml("#0040C1") : hovered ? ColorTranslator.FromHtml("#004EEB") : Blue;
-                Color caption = Enabled ? Color.White : Muted;
-                e.Graphics.Clear(background);
-                using (Pen border = new Pen(Enabled ? background : Line)) e.Graphics.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
-                Rectangle textBounds = new Rectangle(6, 3, Math.Max(0, Width - 12), Math.Max(0, Height - 6));
-                TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis;
-                if (!ShowKeyboardCues) flags |= TextFormatFlags.HidePrefix;
-                TextRenderer.DrawText(e.Graphics, Text, Font, textBounds, caption, background, flags);
-                if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, new Rectangle(4, 4, Math.Max(0, Width - 8), Math.Max(0, Height - 8)), caption, background);
-            }
-            protected override void OnMouseEnter(EventArgs e) { hovered = true; base.OnMouseEnter(e); Invalidate(); }
-            protected override void OnMouseLeave(EventArgs e) { hovered = false; base.OnMouseLeave(e); Invalidate(); }
-            protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) mousePressed = true; base.OnMouseDown(e); Invalidate(); }
-            protected override void OnMouseUp(MouseEventArgs e) { mousePressed = false; base.OnMouseUp(e); Invalidate(); }
-            protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode == Keys.Space) keyboardPressed = true; base.OnKeyDown(e); Invalidate(); }
-            protected override void OnKeyUp(KeyEventArgs e) { keyboardPressed = false; base.OnKeyUp(e); Invalidate(); }
-            protected override void OnEnabledChanged(EventArgs e) { mousePressed = keyboardPressed = false; base.OnEnabledChanged(e); Invalidate(); }
-            protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
-            protected override void OnLostFocus(EventArgs e) { mousePressed = keyboardPressed = false; base.OnLostFocus(e); Invalidate(); }
+            finally{languageMenu.Close();L10n.SetLanguage(previousLanguage);RefreshLanguage();Application.ThreadException-=handler;}
+            return "languageMenuPerformClick=PASS\r\nlanguageMenuEnter=PASS\r\nlicenseMenuPerformClickEnter=PASS";
         }
-        class DropPanel : Panel
-        {
-            bool highlight;
-            public bool Highlight { get { return highlight; } set { highlight = value; Invalidate(); } }
-            public DropPanel() { DoubleBuffered = true; BackColor = Pale; }
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                base.OnPaint(e);
-                e.Graphics.Clear(highlight ? ColorTranslator.FromHtml("#EFF4FF") : Pale);
-                using (Pen pen = new Pen(highlight ? Blue : Line)) { pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1); }
-                string title = L10n.T("Перетащите книги сюда или нажмите для выбора");
-                string caption = L10n.T("FB2 / ZIP / RAR / 7Z  ·  все книги из архива");
-                using (Font headingFont = new Font("Segoe UI Semibold", 10))
-                using (Font captionFont = new Font("Segoe UI", 9))
-                {
-                    TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding;
-                    Size available = new Size(Math.Max(1, Width - 20), Int32.MaxValue);
-                    int headingHeight = TextRenderer.MeasureText(e.Graphics, title, headingFont, available, flags).Height;
-                    int captionHeight = TextRenderer.MeasureText(e.Graphics, caption, captionFont, available, flags).Height;
-                    int gap = Math.Max(4, (int)Math.Round(4 * e.Graphics.DpiY / 96f));
-                    int top = (Height - headingHeight - gap - captionHeight) / 2;
-                    TextRenderer.DrawText(e.Graphics, title, headingFont, new Rectangle(10, top, Math.Max(1, Width - 20), headingHeight), Ink, flags);
-                    TextRenderer.DrawText(e.Graphics, caption, captionFont, new Rectangle(10, top + headingHeight + gap, Math.Max(1, Width - 20), captionHeight), Muted, flags);
-                }
-            }
-        }
+        protected override void Dispose(bool disposing){if(disposing){MiraTheme.Changed-=ApplyTheme;tips.Dispose();languageMenu.Dispose();if(cancellation!=null)cancellation.Cancel();}base.Dispose(disposing);}
+        void ShowLanguageMenu(){MiraContextMenu menu=languageMenu;menu.Items.Clear();menu.BackColor=MiraTheme.Surface;menu.ForeColor=MiraTheme.Text;string[] codes={"ru","en","zh"},names={"Русский","English","简体中文"};for(int i=0;i<codes.Length;i++){string code=codes[i];ToolStripMenuItem item=new ToolStripMenuItem(names[i]){Checked=code==L10n.LanguageCode,ForeColor=MiraTheme.Text};item.Click+=delegate{L10n.SetLanguage(code);RefreshLanguage();};menu.Items.Add(item);}menu.Show(language,new Point(0,language.Height));}
     }
 }

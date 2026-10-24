@@ -71,6 +71,11 @@ namespace Fb2Kindle
 
         public static void Extract(string archivePath, ArchiveBook book, string destination, CancellationToken cancellation)
         {
+            Extract(archivePath, book, destination, cancellation, null);
+        }
+
+        public static void Extract(string archivePath, ArchiveBook book, string destination, CancellationToken cancellation, Action<long, long> progress)
+        {
             archivePath = CheckPath(archivePath);
             if (book == null) throw new ArgumentNullException("book");
             if (String.IsNullOrWhiteSpace(destination)) throw new ArgumentException(L10n.T("Не выбран временный файл для книги."));
@@ -101,7 +106,8 @@ namespace Fb2Kindle
                         {
                             created = true;
                             uint crc;
-                            long copied = CopyBounded(source, output, cancellation, out crc);
+                            long copied = CopyBounded(source, output, cancellation, out crc,
+                                progress == null ? (Action<long>)null : delegate(long count) { progress(count, entry.Length); });
                             if (copied != entry.Length || crc != info.Crc)
                                 throw new Problem(L10n.T("Книга в ZIP-архиве повреждена: проверка целостности не пройдена."));
                         }
@@ -138,7 +144,8 @@ namespace Fb2Kindle
                                 delegate(Stream source)
                                 {
                                     uint ignored;
-                                    copied = CopyBounded(source, output, cancellation, out ignored);
+                                    copied = CopyBounded(source, output, cancellation, out ignored,
+                                        progress == null ? (Action<long>)null : delegate(long count) { progress(count, selected.Size); });
                                 }, cancellation, 300000);
                             if (copied != selected.Size)
                                 throw new Problem(L10n.T("Книга в архиве повреждена: распакован неверный объём данных."));
@@ -240,7 +247,7 @@ namespace Fb2Kindle
             return new InvalidDataException(L10n.T("Не удалось прочитать архив. Проверьте, что он не повреждён и не защищён паролем."), inner);
         }
 
-        private static long CopyBounded(Stream source, Stream destination, CancellationToken cancellation, out uint resultCrc)
+        private static long CopyBounded(Stream source, Stream destination, CancellationToken cancellation, out uint resultCrc, Action<long> progress)
         {
             byte[] buffer = new byte[65536];
             long total = 0;
@@ -254,6 +261,7 @@ namespace Fb2Kindle
                 for (int index = 0; index < count; index++) crc = CrcTable[(crc ^ buffer[index]) & 255] ^ (crc >> 8);
                 destination.Write(buffer, 0, count);
                 total += count;
+                if (progress != null) progress(total);
             }
             resultCrc = crc ^ 0xffffffffU;
             return total;

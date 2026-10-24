@@ -5,14 +5,76 @@ using System.Text;
 using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Fb2Kindle
 {
+    public enum ConversionStage { Reading, Extracting, BuildingEpub, ConvertingAzw3, Saving }
+
+    public sealed class ConversionProgress
+    {
+        public int Percent { get; private set; }
+        public ConversionStage Stage { get; private set; }
+
+        public ConversionProgress(int percent, ConversionStage stage)
+        {
+            Percent = Math.Max(0, Math.Min(100, percent));
+            Stage = stage;
+        }
+    }
+
+    // Each conversion owns its reporter. Calibre stdout and stderr are asynchronous;
+    // the lock keeps callbacks ordered and prevents an older percentage arriving late.
+    // Callers marshal these worker-thread callbacks to their UI synchronization context.
+    internal sealed class ConversionReporter
+    {
+        readonly Action<ConversionProgress> callback;
+        readonly CancellationToken cancellation;
+        readonly object gate = new object();
+        int last = -1;
+        ConversionStage lastStage;
+
+        public ConversionReporter(CancellationToken cancellation, Action<ConversionProgress> callback)
+        { this.cancellation = cancellation; this.callback = callback; }
+
+        public void Check() { cancellation.ThrowIfCancellationRequested(); }
+
+        public void Report(int percent, ConversionStage stage)
+        {
+            Check();
+            Deliver(percent, stage);
+        }
+
+        // Completion follows the atomic move. A cancellation racing that move must
+        // retain the completed book and must not make its UI report a failed result.
+        public void Complete() { Deliver(100, ConversionStage.Saving); }
+
+        void Deliver(int percent, ConversionStage stage)
+        {
+            lock (gate)
+            {
+                percent = Math.Max(last, Math.Max(0, Math.Min(100, percent)));
+                if (percent == last && stage == lastStage) return;
+                last = percent; lastStage = stage;
+                if (callback != null) callback(new ConversionProgress(percent, stage));
+            }
+        }
+    }
+
     public static class KindleConverter
     {
+        static readonly Regex CalibrePercentage = new Regex(@"^\s*(\d{1,3}(?:\.\d+)?)\s*%", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
         public static ConversionResult Convert(string inputPath, ArchiveBook entry, string outputPath, CancellationToken cancellation)
         {
-            if (entry == null) return Convert(inputPath, outputPath, cancellation);
+            return Convert(inputPath, entry, outputPath, cancellation, null);
+        }
+
+        public static ConversionResult Convert(string inputPath, ArchiveBook entry, string outputPath, CancellationToken cancellation, Action<ConversionProgress> progress)
+        {
+            if (entry == null) return Convert(inputPath, outputPath, cancellation, progress);
+            ConversionReporter reporter = new ConversionReporter(cancellation, progress);
             cancellation.ThrowIfCancellationRequested();
             if (File.Exists(outputPath) || Directory.Exists(outputPath)) throw new IOException(L10n.T("Файл уже существует: ") + outputPath);
             string staging = Path.Combine(Path.GetTempPath(), "FB2Kindle-archive-" + Guid.NewGuid().ToString("N"));
@@ -20,9 +82,18 @@ namespace Fb2Kindle
             try
             {
                 string book = Path.Combine(staging, "book.fb2");
-                ArchiveBooks.Extract(inputPath, entry, book, cancellation);
+                reporter.Report(0, ConversionStage.Extracting);
+                ArchiveBooks.Extract(inputPath, entry, book, cancellation, delegate(long copied, long total)
+                {
+                    reporter.Report(total > 0 ? (int)Math.Min(12, copied * 12 / total) : 0, ConversionStage.Extracting);
+                });
                 cancellation.ThrowIfCancellationRequested();
-                return Convert(book, outputPath, cancellation);
+                reporter.Report(12, ConversionStage.Extracting);
+                return Convert(book, outputPath, cancellation, delegate(ConversionProgress value)
+                {
+                    if (value.Percent == 100) reporter.Complete();
+                    else reporter.Report(12 + value.Percent * 88 / 100, value.Stage);
+                });
             }
             finally
             {
@@ -48,6 +119,13 @@ namespace Fb2Kindle
 
         public static ConversionResult Convert(string inputPath, string outputPath, CancellationToken cancellation)
         {
+            return Convert(inputPath, outputPath, cancellation, null);
+        }
+
+        public static ConversionResult Convert(string inputPath, string outputPath, CancellationToken cancellation, Action<ConversionProgress> progress)
+        {
+            ConversionReporter reporter = new ConversionReporter(cancellation, progress);
+            reporter.Report(0, ConversionStage.Reading);
             cancellation.ThrowIfCancellationRequested();
             string output = Path.GetFullPath(outputPath);
             string extension = Path.GetExtension(output).ToLowerInvariant();
@@ -57,13 +135,13 @@ namespace Fb2Kindle
             {
                 List<ArchiveBook> entries = ArchiveBooks.List(inputPath, cancellation);
                 if (entries.Count != 1) throw new InvalidDataException(L10n.T("В архиве несколько книг. Добавьте архив в окно программы: каждая книга будет сохранена отдельным файлом."));
-                return Convert(inputPath, entries[0], output, cancellation);
+                return Convert(inputPath, entries[0], output, cancellation, progress);
             }
             if (extension == ".epub")
             {
                 // The core writes atomically. A completed book is retained if cancellation
                 // arrives at the end; the batch stops before starting the next book.
-                return Fb2Converter.Convert(inputPath, output);
+                return Fb2Converter.Convert(inputPath, output, cancellation, progress);
             }
             if (extension != ".azw3") throw new ArgumentException(L10n.T("Выберите формат EPUB или AZW3."));
             if (File.Exists(output)) throw new IOException(L10n.T("Файл уже существует: ") + output);
@@ -77,8 +155,10 @@ namespace Fb2Kindle
             try
             {
                 string epub = Path.Combine(staging, "book.epub");
-                ConversionResult result = Fb2Converter.Convert(inputPath, epub);
+                ConversionResult result = Fb2Converter.Convert(inputPath, epub, cancellation, delegate(ConversionProgress value)
+                { reporter.Report(value.Percent * 35 / 100, value.Stage); });
                 cancellation.ThrowIfCancellationRequested();
+                reporter.Report(35, ConversionStage.ConvertingAzw3);
                 StringBuilder log = new StringBuilder();
                 object logLock = new object();
                 NormalizeDuplicateEnvironmentNames();
@@ -93,6 +173,9 @@ namespace Fb2Kindle
                 info.EnvironmentVariables["CALIBRE_CONFIG_DIRECTORY"] = Path.Combine(staging, "config");
                 info.EnvironmentVariables["CALIBRE_CACHE_DIRECTORY"] = Path.Combine(staging, "cache");
                 info.EnvironmentVariables["CALIBRE_TEMP_DIR"] = staging;
+                // Flush real progress lines immediately rather than waiting for the
+                // Python stdio buffer to fill when stdout is redirected.
+                info.EnvironmentVariables["PYTHONUNBUFFERED"] = "1";
                 using (Process process = new Process())
                 {
                     process.StartInfo = info;
@@ -100,6 +183,14 @@ namespace Fb2Kindle
                     {
                         if (e.Data == null) return;
                         lock (logLock) { log.AppendLine(e.Data); if (log.Length > 16000) log.Remove(0, log.Length - 16000); }
+                        int percentage;
+                        if (TryCalibrePercent(e.Data, out percentage) && !cancellation.IsCancellationRequested)
+                        {
+                            // DataReceived exceptions must not escape a thread-pool
+                            // callback. Cancellation is observed by the wait loop.
+                            try { reporter.Report(35 + percentage * 63 / 100, ConversionStage.ConvertingAzw3); }
+                            catch (OperationCanceledException) { }
+                        }
                     };
                     process.OutputDataReceived += capture;
                     process.ErrorDataReceived += capture;
@@ -125,7 +216,10 @@ namespace Fb2Kindle
                     }
                 }
                 cancellation.ThrowIfCancellationRequested();
+                reporter.Report(99, ConversionStage.Saving);
+                cancellation.ThrowIfCancellationRequested();
                 File.Move(pending, output);
+                reporter.Complete();
                 return result;
             }
             finally
@@ -133,6 +227,17 @@ namespace Fb2Kindle
                 try { if (File.Exists(pending)) File.Delete(pending); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                 try { if (Directory.Exists(staging)) Directory.Delete(staging, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
+        }
+
+        internal static bool TryCalibrePercent(string line, out int percent)
+        {
+            percent = 0;
+            if (line == null) return false;
+            Match match = CalibrePercentage.Match(line);
+            double value;
+            if (!match.Success || !Double.TryParse(match.Groups[1].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value) || value < 0 || value > 100) return false;
+            percent = (int)Math.Floor(value);
+            return true;
         }
 
         // Some launchers supply both Path and PATH in the inherited environment.
