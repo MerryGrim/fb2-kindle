@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.3.1 — 2026-10-26
+
+### English
+
+- The first launch now opens in the center of the active screen, with a narrower default width of 960 logical pixels.
+- The app remembers the window position, size, and maximized state between launches. Closing a minimized window preserves its previous normal or maximized state.
+- Saved window bounds are fitted to the available screen if a monitor is disconnected or the display working area changes.
+
+### Русский
+
+- При первом запуске окно открывается по центру активного экрана; начальная ширина уменьшена до 960 логических пикселей.
+- Позиция, размер и развёрнутое состояние окна сохраняются между запусками. Закрытие свёрнутого окна сохраняет его предыдущее обычное или развёрнутое состояние.
+- После отключения монитора или изменения рабочей области экрана сохранённое окно размещается в доступной области.
+
+### 简体中文
+
+- 首次启动时，窗口在当前屏幕中央打开，默认宽度缩小为 960 个逻辑像素。
+- 程序会记住窗口的位置、大小和最大化状态。关闭已最小化的窗口时，会保留其之前的普通或最大化状态。
+- 显示器断开连接或屏幕工作区发生变化后，会调整已保存的窗口位置和大小，使其位于可用区域内。
+
 ## 1.3.0 — 2026-10-24
 
 ### English

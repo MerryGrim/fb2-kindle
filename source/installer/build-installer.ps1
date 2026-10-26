@@ -2,7 +2,7 @@ param(
     [string]$AppSource = (Join-Path $PSScriptRoot '..\..'),
     [string]$ReleaseDir = (Join-Path $PSScriptRoot '..\..\..'),
     [string]$InnoCompiler = '',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.3.0',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.3.1',
     [string]$VisualStudioPath = '',
     [switch]$SkipApplicationBuild
 )

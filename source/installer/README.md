@@ -6,13 +6,13 @@ Calibre 9.15.0 / 7-Zip 26.00 engines have been prepared:
 ```powershell
 .\source\installer\build-installer.ps1 `
   -AppSource 'D:\AI\Projects\FB2Kindle' `
-  -ReleaseDir 'D:\AI\Projects\FB2Kindle\outputs\1.3.0' `
+  -ReleaseDir 'D:\AI\Projects\FB2Kindle\outputs\1.3.1' `
   -InnoCompiler 'D:\AI\Tools\InnoSetup7\ISCC.exe' `
   -VisualStudioPath 'D:\AI\Tools\BuildTools'
 ```
 
 Use `-SkipApplicationBuild` only after separately validating the current EXE.
-The final distributable is `FB2Kindle-1.3.0-Setup.exe`; `installer-build/`
+The final distributable is `FB2Kindle-1.3.1-Setup.exe`; `installer-build/`
 contains intermediate files, including the embedded Inno executable. Do not
 distribute that inner executable as the public installer. Existing final output
 is never replaced; select a new release folder for a repeated build.

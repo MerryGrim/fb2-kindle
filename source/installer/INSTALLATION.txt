@@ -1,4 +1,4 @@
-FB2 KINDLE 1.3.0 — УСТАНОВЛЕННАЯ ВЕРСИЯ
+FB2 KINDLE 1.3.1 — УСТАНОВЛЕННАЯ ВЕРСИЯ
 
 Конвертер книг FB2, ZIP, RAR и 7Z в EPUB и AZW3 для Windows 10/11 x64.
 
@@ -36,7 +36,7 @@ EPUB/AZW3 остаются на месте, в том числе если вы �
 Лицензии и исходные архивы движков: engine\Calibre и engine\Archive7z.
 
 
-FB2 KINDLE 1.3.0 — INSTALLED VERSION
+FB2 KINDLE 1.3.1 — INSTALLED VERSION
 
 Convert FB2 books and ZIP, RAR and 7Z archives to EPUB or AZW3 on
 Windows 10/11 x64.
@@ -65,7 +65,7 @@ Engine notices and matching source archives: engine\Calibre and
 engine\Archive7z.
 
 
-FB2 KINDLE 1.3.0 — 已安装版本
+FB2 KINDLE 1.3.1 — 已安装版本
 
 在 Windows 10/11 x64 上将 FB2 图书和 ZIP、RAR、7Z 压缩包转换为
 EPUB 或 AZW3。

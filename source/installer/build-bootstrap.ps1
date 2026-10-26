@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$InnerSetup,
     [Parameter(Mandatory = $true)][string]$OutputExe,
-    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '1.3.0',
+    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '1.3.1',
     [string]$VisualStudioPath = ''
 )
 $ErrorActionPreference = 'Stop'

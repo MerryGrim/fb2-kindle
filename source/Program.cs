@@ -10,8 +10,8 @@ using System.Reflection;
 [assembly: AssemblyCompany("MerryGrim")]
 [assembly: AssemblyProduct("FB2 Kindle")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 MerryGrim")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.3.1.0")]
+[assembly: AssemblyFileVersion("1.3.1.0")]
 
 namespace Fb2Kindle
 {

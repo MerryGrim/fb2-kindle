@@ -211,6 +211,17 @@ namespace Fb2Kindle
         public static Point DecodeHitPoint(IntPtr packedValue){long packed=packedValue.ToInt64();return new Point(unchecked((short)(packed&0xffff)),unchecked((short)((packed>>16)&0xffff)));}
         protected override void WndProc(ref Message m)
         {
+            if(m.Msg==0x24)
+            {
+                base.WndProc(ref m);
+                // WM_GETMINMAXINFO uses monitor-relative maximum coordinates.
+                // Compute these on demand so moving between monitors stays correct.
+                Screen screen=Screen.FromHandle(Handle);Rectangle work=screen.WorkingArea;
+                MinMaxInfo info=(MinMaxInfo)Marshal.PtrToStructure(m.LParam,typeof(MinMaxInfo));
+                info.MaximumPosition=new Point(work.Left-screen.Bounds.Left,work.Top-screen.Bounds.Top);
+                info.MaximumSize=work.Size;
+                Marshal.StructureToPtr(info,m.LParam,false);return;
+            }
             if(m.Msg==0x84&&WindowState!=FormWindowState.Maximized)
             {
                 Point p=PointToClient(DecodeHitPoint(m.LParam));
@@ -222,6 +233,7 @@ namespace Fb2Kindle
         [DllImport("user32.dll")]static extern bool ReleaseCapture();
         [DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr h,int m,IntPtr w,IntPtr l);
         [DllImport("dwmapi.dll")]static extern int DwmSetWindowAttribute(IntPtr h,int attr,ref int val,int size);
+        [StructLayout(LayoutKind.Sequential)]struct MinMaxInfo{public Point Reserved;public Size MaximumSize;public Point MaximumPosition;public Size MinimumTrackSize,MaximumTrackSize;}
     }
 
     static class UiSettings
@@ -229,8 +241,10 @@ namespace Fb2Kindle
         public static bool Isolated;
         public static string Theme="system",Format="AZW3",Folder="";
         public static bool Beside=true;
-        static string PathName { get {return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"FB2Kindle","ui.txt");}}
-        public static void Load(){if(Isolated)return;try{foreach(string line in File.ReadAllLines(PathName,Encoding.UTF8)){int split=line.IndexOf('=');if(split<0)continue;string key=line.Substring(0,split),val=line.Substring(split+1);if(key=="theme"&&(val=="dark"||val=="light"||val=="system"))Theme=val;else if(key=="format"&&(val=="AZW3"||val=="EPUB"))Format=val;else if(key=="folder")Folder=val;else if(key=="beside")Beside=val=="1";}}catch(IOException){}catch(UnauthorizedAccessException){} }
-        public static void Save(){if(Isolated)return;try{Directory.CreateDirectory(Path.GetDirectoryName(PathName));File.WriteAllLines(PathName,new[]{"theme="+Theme,"format="+Format,"folder="+Folder,"beside="+(Beside?"1":"0")},new UTF8Encoding(false));}catch(IOException){}catch(UnauthorizedAccessException){} }
+        internal static string StoragePathOverride=null;
+        internal static WindowPlacement Placement;
+        static string PathName { get {return StoragePathOverride??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"FB2Kindle","ui.txt");}}
+        public static void Load(){if(Isolated)return;Placement=null;try{foreach(string line in File.ReadAllLines(PathName,Encoding.UTF8)){int split=line.IndexOf('=');if(split<0)continue;string key=line.Substring(0,split),val=line.Substring(split+1);if(key=="theme"&&(val=="dark"||val=="light"||val=="system"))Theme=val;else if(key=="format"&&(val=="AZW3"||val=="EPUB"))Format=val;else if(key=="folder")Folder=val;else if(key=="beside")Beside=val=="1";else if(key=="window")WindowPlacement.TryParse(val,out Placement);}}catch(IOException){}catch(UnauthorizedAccessException){} }
+        public static void Save(){if(Isolated)return;try{Directory.CreateDirectory(Path.GetDirectoryName(PathName));List<string> lines=new List<string>{"theme="+Theme,"format="+Format,"folder="+Folder,"beside="+(Beside?"1":"0")};if(Placement!=null)lines.Add("window="+Placement);File.WriteAllLines(PathName,lines.ToArray(),new UTF8Encoding(false));}catch(IOException){}catch(UnauthorizedAccessException){} }
     }
 }

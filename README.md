@@ -1,12 +1,12 @@
-# FB2 Kindle 1.3.0
+# FB2 Kindle 1.3.1
 
 [English](#english) · [Русский](#русский) · [简体中文](#简体中文)
 
 A local Windows desktop converter from FB2 to EPUB and AZW3, with light and dark MiraUI themes, drag and drop, batch conversion, and ZIP, RAR, and 7Z support.
 
-![FB2 Kindle 1.3.0 — English, light MiraUI theme](docs/screenshots/1.3.0-en-light.png)
+![FB2 Kindle 1.3.1 — English, light MiraUI theme](docs/screenshots/1.3.1-en-light.png)
 
-**[Download for Windows](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.0/FB2Kindle-1.3.0-Setup.exe)** · [Website](https://MerryGrim.github.io/fb2-kindle/) · [Source archive](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.0/FB2Kindle-Source-1.3.0.zip) · [All releases](https://github.com/MerryGrim/fb2-kindle/releases) · [Author](https://github.com/MerryGrim)
+**[Download for Windows](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.1/FB2Kindle-1.3.1-Setup.exe)** · [Website](https://MerryGrim.github.io/fb2-kindle/) · [Source archive](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.1/FB2Kindle-Source-1.3.1.zip) · [All releases](https://github.com/MerryGrim/fb2-kindle/releases) · [Author](https://github.com/MerryGrim)
 
 ## English
 
@@ -19,10 +19,11 @@ FB2 Kindle turns individual FB2 books and book archives into separate EPUB or AZ
 - **Queue:** overall progress and a mini progress bar for each book, automatic scrolling to the current book, and a stop action. The queue has its own scrollbar only when it contains more than seven books.
 - **Destination:** save beside each original book or in a chosen folder; folder selection and result opening are grouped together.
 - **Interface:** compact MiraUI with mint accents, light and dark themes, integrated window controls, and a themed About dialog for version information, credits, licenses, and the author's GitHub profile.
+- **Window:** the first launch is centered with a default width of 960 logical pixels. Later launches restore its size, position, and maximized state; a disconnected monitor cannot leave it outside the available desktop.
 
 ### Installation
 
-Download [FB2Kindle-1.3.0-Setup.exe](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.0/FB2Kindle-1.3.0-Setup.exe). The offline installer includes unchanged Calibre 9.15.0 and 7-Zip 26.00 runtimes, their licenses and notices, and corresponding source archives. Select English, Русский, or 简体中文, then follow the MiraUI installation flow.
+Download [FB2Kindle-1.3.1-Setup.exe](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.1/FB2Kindle-1.3.1-Setup.exe). The offline installer includes unchanged Calibre 9.15.0 and 7-Zip 26.00 runtimes, their licenses and notices, and corresponding source archives. Select English, Русский, or 简体中文, then follow the MiraUI installation flow.
 
 **Requirements:** Windows 10 or 11, x64, and .NET Framework 4.8. Password-protected archives must be unpacked first. A single FB2 book is limited to 96 MiB. Some named FB2 styles are simplified; rendering depends on the reader and its firmware.
 
@@ -32,7 +33,7 @@ EPUB is intended for Send to Kindle or another EPUB-compatible reader. For ordin
 
 The application's own source code, documentation, and assets are licensed under [MIT](LICENSE), © 2026 MerryGrim. Calibre, 7-Zip, and Inno Setup retain their own licenses; MIT does not cover them. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-![FB2 Kindle 1.3.0 — English, dark MiraUI theme](docs/screenshots/1.3.0-en-dark.png)
+![FB2 Kindle 1.3.1 — English, dark MiraUI theme](docs/screenshots/1.3.1-en-dark.png)
 
 ## Русский
 
@@ -45,10 +46,11 @@ FB2 Kindle превращает отдельные FB2-книги и архив�
 - **Очередь:** общий прогресс и мини-прогресс каждой книги, автоматическая прокрутка к текущей книге и остановка обработки. Внутренняя прокрутка появляется только после семи книг.
 - **Сохранение:** рядом с каждой исходной книгой или в выбранную папку; выбор папки и открытие результата собраны в одном блоке.
 - **Интерфейс:** компактный MiraUI с мятными акцентами, светлой и тёмной темами, встроенными кнопками окна и тематическим окном «О приложении» с версиями, авторством, лицензиями и профилем автора на GitHub.
+- **Окно:** первый запуск по центру экрана с начальной шириной 960 логических пикселей. При повторном открытии восстанавливаются размер, позиция и развёрнутое состояние; после отключения монитора окно остаётся в доступной области экрана.
 
 ### Установка
 
-Скачайте [FB2Kindle-1.3.0-Setup.exe](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.0/FB2Kindle-1.3.0-Setup.exe). Автономный установщик включает неизменённые движки Calibre 9.15.0 и 7-Zip 26.00, их лицензии, уведомления и соответствующие исходные архивы. Выберите Русский, English или 简体中文 и пройдите установку в MiraUI. Для конвертации интернет не нужен.
+Скачайте [FB2Kindle-1.3.1-Setup.exe](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.1/FB2Kindle-1.3.1-Setup.exe). Автономный установщик включает неизменённые движки Calibre 9.15.0 и 7-Zip 26.00, их лицензии, уведомления и соответствующие исходные архивы. Выберите Русский, English или 简体中文 и пройдите установку в MiraUI. Для конвертации интернет не нужен.
 
 **Требования:** Windows 10 или 11, x64, и .NET Framework 4.8. Парольные архивы предварительно распакуйте. Предел одной FB2-книги — 96 МиБ. Некоторые именованные стили FB2 упрощаются; отображение зависит от читалки и её прошивки.
 
@@ -69,10 +71,11 @@ FB2 Kindle 可将单本 FB2 电子书或包含多本书的压缩包转换为独�
 - **队列：** 整体进度和每本书的迷你进度条、自动滚动到当前电子书，以及停止处理。超过七本书时，队列内部才会出现滚动条。
 - **保存位置：** 原文件旁或指定文件夹；选择文件夹和打开结果的操作集中在同一区域。
 - **界面风格：** 紧凑的 MiraUI 布局、薄荷色点缀、浅色和深色主题，以及集成窗口按钮。采用相同主题的“关于”窗口提供版本、作者、许可证及作者的 GitHub 主页链接。
+- **窗口：** 首次启动时在屏幕中央打开，默认宽度为 960 个逻辑像素。再次启动时会恢复窗口大小、位置和最大化状态；显示器断开连接后，窗口仍会位于可用屏幕区域内。
 
 ### 安装
 
-下载 [FB2Kindle-1.3.0-Setup.exe](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.0/FB2Kindle-1.3.0-Setup.exe)。离线安装包包含未经修改的 Calibre 9.15.0 和 7-Zip 26.00 引擎，以及对应的许可证、声明和源码压缩包。选择 English、Русский 或 简体中文，然后按照 MiraUI 安装界面完成安装。转换时无需联网。
+下载 [FB2Kindle-1.3.1-Setup.exe](https://github.com/MerryGrim/fb2-kindle/releases/download/v1.3.1/FB2Kindle-1.3.1-Setup.exe)。离线安装包包含未经修改的 Calibre 9.15.0 和 7-Zip 26.00 引擎，以及对应的许可证、声明和源码压缩包。选择 English、Русский 或 简体中文，然后按照 MiraUI 安装界面完成安装。转换时无需联网。
 
 **系统要求：** Windows 10 或 11（x64），以及 .NET Framework 4.8。加密压缩包需要先自行解压。单本 FB2 文件上限为 96 MiB。部分 FB2 命名样式会被简化，实际显示效果取决于阅读器及其固件。
 
@@ -121,10 +124,10 @@ Install [Inno Setup 7.1 or newer](https://jrsoftware.org/isdl.php). The script f
 For the complete offline installer, first prepare `engine/` with the full, unchanged Calibre and 7-Zip runtimes, their licenses and copyright notices, and the corresponding source archives. Include the Inno Setup license at `engine/InnoSetup/LICENSE.txt`. These components are not included in this repository. Follow their distribution requirements in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ```powershell
-.\source\installer\build-installer.ps1 -Version 1.3.0
+.\source\installer\build-installer.ps1 -Version 1.3.1
 ```
 
-The final installer is `FB2Kindle-1.3.0-Setup.exe`. By default it is written to the parent directory; use `-ReleaseDir` to choose a clean output directory and `-AppSource` to choose the prepared application directory. Existing installer output is not overwritten. When invoking `ISCC.exe` directly, `/DAppSource` and `/DReleaseDir` override the source and output directories; use the build script to include the native bootstrap.
+The final installer is `FB2Kindle-1.3.1-Setup.exe`. By default it is written to the parent directory; use `-ReleaseDir` to choose a clean output directory and `-AppSource` to choose the prepared application directory. Existing installer output is not overwritten. When invoking `ISCC.exe` directly, `/DAppSource` and `/DReleaseDir` override the source and output directories; use the build script to include the native bootstrap.
 
 ### Website
 

@@ -8,7 +8,7 @@
 #endif
 #define AppName "FB2 Kindle"
 #ifndef AppVersion
-  #define AppVersion "1.3.0"
+  #define AppVersion "1.3.1"
 #endif
 #ifndef OutputName
   #define OutputName "FB2Kindle.Inner"

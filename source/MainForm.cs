@@ -29,14 +29,17 @@ namespace Fb2Kindle
         string lastFolder,lastResultDirectory,statusKey="Добавьте книги для конвертации";
         object[] statusArgs = new object[0];
         int completedCount;
+        bool placementReady;
+        Rectangle normalWindowBounds;
+        FormWindowState lastVisibleWindowState=FormWindowState.Normal;
         public MainForm()
         {
             UiSettings.Load();MiraTheme.Dark=UiSettings.Theme=="dark"||(UiSettings.Theme=="system"&&MiraTheme.SystemDark());
             using(Graphics g=CreateGraphics())UiScale=g.DpiX/96f;
-            Font=new Font("Segoe UI",10);StartPosition=FormStartPosition.CenterScreen;Text="FB2 Kindle";KeyPreview=true;
+            Font=new Font("Segoe UI",10);StartPosition=FormStartPosition.Manual;Text="FB2 Kindle";KeyPreview=true;
             try{Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);}catch{}
             Rectangle work=Screen.FromControl(this).WorkingArea;
-            Size=new Size(Math.Min(S(1040),work.Width-S(24)),Math.Min(S(980),work.Height-S(24)));MinimumSize=new Size(Math.Min(S(900),work.Width-S(24)),Math.Min(S(740),work.Height-S(24)));MaximizedBounds=work;
+            Size=new Size(Math.Min(S(960),work.Width-S(24)),Math.Min(S(980),work.Height-S(24)));MinimumSize=new Size(Math.Min(S(900),work.Width-S(24)),Math.Min(S(740),work.Height-S(24)));
             SetupLabel(brand,"FB2 Kindle",15,true);SetupLabel(subtitle,"Книги для вашей читалки",9,false);
             SetupLabel(heading,"Очередь книг",16,true);SetupLabel(count,"",9,false);SetupLabel(formats,"FB2 · ZIP · RAR · 7Z",9,false);
             SetupLabel(formatTitle,"Формат результата",10,true);SetupLabel(saveTitle,"Сохранение",10,true);
@@ -63,10 +66,47 @@ namespace Fb2Kindle
             outputFolder.TextChanged+=delegate{if(!initializing&&!beside.Selected){lastFolder=outputFolder.Text;UiSettings.Folder=lastFolder;if(!preview)UiSettings.Save();RefreshActions();}};
             convert.Click+=async delegate{await ConvertBooks();};cancel.Click+=delegate{RequestStop();};EnableDrop(this);
             KeyDown+=async delegate(object sender,KeyEventArgs e){if(e.Control&&e.KeyCode==Keys.O&&!busy){await ChooseBooks();e.Handled=true;}else if(e.KeyCode==Keys.F1){using(AboutForm f=new AboutForm())f.ShowDialog(this);e.Handled=true;}else if(e.KeyCode==Keys.Escape&&busy){RequestStop();e.Handled=true;}};
-            FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy){e.Cancel=true;RequestStop();SetStatus("Остановка… Затем окно можно закрыть.");}else if(!preview){UiSettings.Folder=lastFolder??"";UiSettings.Save();}};
+            FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy){e.Cancel=true;RequestStop();SetStatus("Остановка… Затем окно можно закрыть.");}};
             MiraTheme.Changed+=ApplyTheme;initializing=false;RefreshLanguage();ApplyTheme();UpdateDestinationText();RefreshActions();
         }
         int S(int value){return (int)Math.Round(value*UiScale);}
+        protected override void OnLoad(EventArgs e)
+        {
+            if(!preview)
+            {
+                WindowPlacement saved=UiSettings.Placement;
+                Screen screen=saved==null?Screen.FromPoint(Cursor.Position):Screen.FromRectangle(saved.Bounds);
+                Rectangle work=screen.WorkingArea;
+                MinimumSize=new Size(Math.Min(S(900),work.Width-S(24)),Math.Min(S(740),work.Height-S(24)));
+                Bounds=saved==null?WindowPlacement.Center(new Size(Math.Min(S(960),work.Width-S(24)),Math.Min(S(980),work.Height-S(24))),work):WindowPlacement.Resolve(saved.Bounds,saved.WorkingArea,work,MinimumSize);
+                normalWindowBounds=Bounds;
+                if(saved!=null&&saved.Maximized)WindowState=FormWindowState.Maximized;
+                lastVisibleWindowState=WindowState;
+                placementReady=true;
+                UpdateWindowState();
+            }
+            base.OnLoad(e);
+        }
+        protected override void OnLocationChanged(EventArgs e){base.OnLocationChanged(e);RememberWindowBounds();}
+        protected override void OnResize(EventArgs e){base.OnResize(e);RememberWindowBounds();UpdateWindowState();}
+        void RememberWindowBounds()
+        {
+            if(!placementReady||preview||WindowState==FormWindowState.Minimized)return;
+            lastVisibleWindowState=WindowState;
+            if(WindowState==FormWindowState.Normal)normalWindowBounds=Bounds;
+        }
+        void UpdateWindowState()
+        {
+            if(maximize!=null){maximize.IconName=WindowState==FormWindowState.Maximized?"restore":"square";maximize.Invalidate();}
+        }
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            if(e.Cancel||preview||!placementReady)return;
+            RememberWindowBounds();
+            UiSettings.Placement=new WindowPlacement{Bounds=normalWindowBounds,WorkingArea=Screen.FromRectangle(normalWindowBounds).WorkingArea,Maximized=lastVisibleWindowState==FormWindowState.Maximized};
+            UiSettings.Folder=lastFolder??"";UiSettings.Save();
+        }
         void SetupLabel(Label c,string text,float size,bool strong){c.Font=new Font(strong?"Segoe UI Semibold":"Segoe UI",size);c.TextAlign=ContentAlignment.MiddleLeft;c.AutoEllipsis=true;c.UseMnemonic=false;Controls.Add(c);if(text!="FB2 Kindle"&&!String.IsNullOrEmpty(text)&&text!="FB2 · ZIP · RAR · 7Z")captions[c]=text;c.Text=L10n.T(text);}
         void SetupButton(MiraButton c,string text,string icon,bool primary,bool quiet){c.Font=new Font("Segoe UI",10);c.UiScale=UiScale;c.IconName=icon;c.Primary=primary;c.Quiet=quiet;c.ForeColor=MiraTheme.Text;Controls.Add(c);if(!String.IsNullOrEmpty(text))captions[c]=text;c.Text=L10n.T(text);}
         void DragHeader(object sender,MouseEventArgs e){if(e.Button==MouseButtons.Left){if(e.Clicks==2)ToggleMaximize();else DragWindow();}}

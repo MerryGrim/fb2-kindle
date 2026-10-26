@@ -31,7 +31,7 @@ namespace Fb2Kindle
             Mira("Создание AZW3…","Creating AZW3…","正在创建 AZW3…");
             Mira("Сохранение файла…","Saving the file…","正在保存文件…");
             Mira("Чтение FB2…","Reading FB2…","正在读取 FB2…");
-            Mira("Версия 1.3.0 · MiraUI","Version 1.3.0 · MiraUI","版本 1.3.0 · MiraUI");
+            Mira("Версия 1.3.1 · MiraUI","Version 1.3.1 · MiraUI","版本 1.3.1 · MiraUI");
             Mira("Лицензии и компоненты","Licenses and components","许可证与组件");
             Mira("Calibre и 7-Zip работают отдельными процессами и сохраняют свои лицензии. Версии и соответствующие исходные архивы указаны в THIRD-PARTY-NOTICES.md и папке engine.","Calibre and 7-Zip run as separate processes and retain their own licenses. Versions and matching source archives are listed in THIRD-PARTY-NOTICES.md and the engine folder.","Calibre 和 7-Zip 作为独立进程运行，保留各自的许可证。版本及对应源代码压缩包见 THIRD-PARTY-NOTICES.md 和 engine 文件夹。");
             Mira("Продолжить","Continue","继续");
