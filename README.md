@@ -19,7 +19,7 @@ FB2 Kindle turns individual FB2 books and book archives into separate EPUB or AZ
 - **Queue:** overall progress and a mini progress bar for each book, automatic scrolling to the current book, and a stop action. The queue has its own scrollbar only when it contains more than seven books.
 - **Destination:** save beside each original book or in a chosen folder; folder selection and result opening are grouped together.
 - **Interface:** compact MiraUI with mint accents, light and dark themes, integrated window controls, and a themed About dialog for version information, credits, licenses, and the author's GitHub profile.
-- **Window:** the first launch is centered with a default width of 960 logical pixels. Later launches restore its size, position, and maximized state; a disconnected monitor cannot leave it outside the available desktop.
+- **Window:** the first launch is centered with a compact default size of 960 × 820 logical pixels. Later launches restore its width, height, position, and maximized state; a disconnected monitor cannot leave it outside the available desktop.
 
 ### Installation
 
@@ -46,7 +46,7 @@ FB2 Kindle превращает отдельные FB2-книги и архив�
 - **Очередь:** общий прогресс и мини-прогресс каждой книги, автоматическая прокрутка к текущей книге и остановка обработки. Внутренняя прокрутка появляется только после семи книг.
 - **Сохранение:** рядом с каждой исходной книгой или в выбранную папку; выбор папки и открытие результата собраны в одном блоке.
 - **Интерфейс:** компактный MiraUI с мятными акцентами, светлой и тёмной темами, встроенными кнопками окна и тематическим окном «О приложении» с версиями, авторством, лицензиями и профилем автора на GitHub.
-- **Окно:** первый запуск по центру экрана с начальной шириной 960 логических пикселей. При повторном открытии восстанавливаются размер, позиция и развёрнутое состояние; после отключения монитора окно остаётся в доступной области экрана.
+- **Окно:** первый запуск по центру экрана с компактным начальным размером 960 × 820 логических пикселей. При повторном открытии восстанавливаются ширина, высота, позиция и развёрнутое состояние; после отключения монитора окно остаётся в доступной области экрана.
 
 ### Установка
 
@@ -71,7 +71,7 @@ FB2 Kindle 可将单本 FB2 电子书或包含多本书的压缩包转换为独�
 - **队列：** 整体进度和每本书的迷你进度条、自动滚动到当前电子书，以及停止处理。超过七本书时，队列内部才会出现滚动条。
 - **保存位置：** 原文件旁或指定文件夹；选择文件夹和打开结果的操作集中在同一区域。
 - **界面风格：** 紧凑的 MiraUI 布局、薄荷色点缀、浅色和深色主题，以及集成窗口按钮。采用相同主题的“关于”窗口提供版本、作者、许可证及作者的 GitHub 主页链接。
-- **窗口：** 首次启动时在屏幕中央打开，默认宽度为 960 个逻辑像素。再次启动时会恢复窗口大小、位置和最大化状态；显示器断开连接后，窗口仍会位于可用屏幕区域内。
+- **窗口：** 首次启动时在屏幕中央打开，默认大小为 960 × 820 个逻辑像素。再次启动时会恢复窗口的宽度、高度、位置和最大化状态；显示器断开连接后，窗口仍会位于可用屏幕区域内。
 
 ### 安装
 

@@ -56,7 +56,7 @@ public static class WindowPlacementTests
     static void PurePlacement()
     {
         Rectangle work=new Rectangle(0,0,1920,1040),left=new Rectangle(-1600,60,1600,900);
-        Check(WindowPlacement.Center(new Size(960,980),work)==new Rectangle(480,30,960,980),"first-run placement is centered within working area");
+        Check(WindowPlacement.Center(new Size(960,820),work)==new Rectangle(480,110,960,820),"first-run placement is centered within working area");
         Rectangle normal=new Rectangle(170,90,1100,820);
         Check(WindowPlacement.Resolve(normal,work,work,new Size(900,740))==normal,"valid size and position are preserved exactly");
         Rectangle negative=new Rectangle(-1500,100,1000,800);
@@ -84,6 +84,11 @@ public static class WindowPlacementTests
         Check(Math.Abs(firstBounds.Left-(firstWork.Left+(firstWork.Width-firstBounds.Width)/2))<=1&&Math.Abs(firstBounds.Top-(firstWork.Top+(firstWork.Height-firstBounds.Height)/2))<=1,"native first launch is visibly centered");
         int expectedWidth=Math.Min((int)Math.Round(960*Single.Parse(first["scale"],CultureInfo.InvariantCulture)),firstWork.Width-(int)Math.Round(24*Single.Parse(first["scale"],CultureInfo.InvariantCulture)));
         Check(firstBounds.Width==expectedWidth,"native first launch uses the narrower 960 logical pixel width");
+        float scale=Single.Parse(first["scale"],CultureInfo.InvariantCulture);
+        int expectedHeight=Math.Min((int)Math.Round(820*scale),firstWork.Height-(int)Math.Round(24*scale));
+        Check(firstBounds.Height==expectedHeight,"native first launch uses the shorter 820 logical pixel height");
+        if(firstWork.Height>=(int)Math.Round(844*scale))Check(first["queue7"]=="False","native default window fits seven books without queue scrolling");
+        Check(first["queue8"]=="True","native default window scrolls internally when the eighth book is added");
         foreach(string mode in new[]{"normal","max","min-normal","min-max"})
         {
             string directory=Path.Combine(root,mode);
@@ -113,6 +118,11 @@ public static class WindowPlacementTests
             Rectangle normal=form.WindowState==FormWindowState.Normal?form.Bounds:form.RestoreBounds;
             FormWindowState startupState=form.WindowState;
             string startupIcon=((MiraButton)typeof(MainForm).GetField("maximize",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(form)).IconName;
+            MiraQueue queue=(MiraQueue)typeof(MainForm).GetField("queue",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(form);
+            for(int i=0;i<7;i++)queue.Books.Add(new BookItem{Source="Synthetic window QA "+i+".fb2"});
+            queue.RefreshBooks();Pump();bool sevenScroll=queue.VerticalScroll.Visible;
+            queue.Books.Add(new BookItem{Source="Synthetic window QA 8.fb2"});queue.RefreshBooks();Pump();bool eightScroll=queue.VerticalScroll.Visible;
+            queue.Books.Clear();queue.RefreshBooks();
             if(action.StartsWith("write-",StringComparison.Ordinal))
             {
                 form.WindowState=FormWindowState.Normal;Pump();
@@ -135,7 +145,7 @@ public static class WindowPlacementTests
                 form.Close();Pump();
             }
             float scale=form.UiScale;
-            File.WriteAllLines(Path.Combine(directory,action+".txt"),new[]{"bounds="+Rect(startupBounds),"normal="+Rect(normal),"work="+Rect(work),"state="+startupState,"icon="+startupIcon,"scale="+scale.ToString(CultureInfo.InvariantCulture),"theme="+UiSettings.Theme,"format="+UiSettings.Format,"folder="+UiSettings.Folder,"beside="+UiSettings.Beside},new UTF8Encoding(false));
+            File.WriteAllLines(Path.Combine(directory,action+".txt"),new[]{"bounds="+Rect(startupBounds),"normal="+Rect(normal),"work="+Rect(work),"state="+startupState,"icon="+startupIcon,"scale="+scale.ToString(CultureInfo.InvariantCulture),"queue7="+sevenScroll,"queue8="+eightScroll,"theme="+UiSettings.Theme,"format="+UiSettings.Format,"folder="+UiSettings.Folder,"beside="+UiSettings.Beside},new UTF8Encoding(false));
         }
         return 0;
     }

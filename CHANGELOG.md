@@ -4,19 +4,19 @@
 
 ### English
 
-- The first launch now opens in the center of the active screen, with a narrower default width of 960 logical pixels.
+- The first launch now opens in the center of the active screen, with a smaller default width and height of 960 × 820 logical pixels. The compact layout still fits seven books before the queue needs its own scrollbar.
 - The app remembers the window position, size, and maximized state between launches. Closing a minimized window preserves its previous normal or maximized state.
 - Saved window bounds are fitted to the available screen if a monitor is disconnected or the display working area changes.
 
 ### Русский
 
-- При первом запуске окно открывается по центру активного экрана; начальная ширина уменьшена до 960 логических пикселей.
+- При первом запуске окно открывается по центру активного экрана; начальные ширина и высота уменьшены до 960 × 820 логических пикселей. Компактный макет по-прежнему вмещает семь книг до появления внутренней прокрутки очереди.
 - Позиция, размер и развёрнутое состояние окна сохраняются между запусками. Закрытие свёрнутого окна сохраняет его предыдущее обычное или развёрнутое состояние.
 - После отключения монитора или изменения рабочей области экрана сохранённое окно размещается в доступной области.
 
 ### 简体中文
 
-- 首次启动时，窗口在当前屏幕中央打开，默认宽度缩小为 960 个逻辑像素。
+- 首次启动时，窗口在当前屏幕中央打开，默认宽度和高度缩小为 960 × 820 个逻辑像素。紧凑布局仍可容纳七本书，超过后才在队列内显示滚动条。
 - 程序会记住窗口的位置、大小和最大化状态。关闭已最小化的窗口时，会保留其之前的普通或最大化状态。
 - 显示器断开连接或屏幕工作区发生变化后，会调整已保存的窗口位置和大小，使其位于可用区域内。
 

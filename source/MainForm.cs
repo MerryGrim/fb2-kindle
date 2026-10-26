@@ -39,7 +39,7 @@ namespace Fb2Kindle
             Font=new Font("Segoe UI",10);StartPosition=FormStartPosition.Manual;Text="FB2 Kindle";KeyPreview=true;
             try{Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);}catch{}
             Rectangle work=Screen.FromControl(this).WorkingArea;
-            Size=new Size(Math.Min(S(960),work.Width-S(24)),Math.Min(S(980),work.Height-S(24)));MinimumSize=new Size(Math.Min(S(900),work.Width-S(24)),Math.Min(S(740),work.Height-S(24)));
+            Size=new Size(Math.Min(S(960),work.Width-S(24)),Math.Min(S(820),work.Height-S(24)));MinimumSize=new Size(Math.Min(S(900),work.Width-S(24)),Math.Min(S(740),work.Height-S(24)));
             SetupLabel(brand,"FB2 Kindle",15,true);SetupLabel(subtitle,"Книги для вашей читалки",9,false);
             SetupLabel(heading,"Очередь книг",16,true);SetupLabel(count,"",9,false);SetupLabel(formats,"FB2 · ZIP · RAR · 7Z",9,false);
             SetupLabel(formatTitle,"Формат результата",10,true);SetupLabel(saveTitle,"Сохранение",10,true);
@@ -59,7 +59,7 @@ namespace Fb2Kindle
             Controls.Add(destinationModes);destinationModes.Controls.Add(together);destinationModes.Controls.Add(beside);Controls.Add(overall);
             language.Font=new Font("Segoe UI",10);language.UiScale=UiScale;language.Quiet=true;Controls.Add(language);language.Click+=delegate{ShowLanguageMenu();};
             lastFolder=UiSettings.Folder;azw3.Selected=UiSettings.Format=="AZW3";epub.Selected=!azw3.Selected;beside.Selected=UiSettings.Beside;together.Selected=!beside.Selected;
-            brand.MouseDown+=DragHeader;subtitle.MouseDown+=DragHeader;MouseDown+=delegate(object sender,MouseEventArgs e){if(e.Y<S(ClientSize.Height<S(740)?54:70))DragHeader(sender,e);};
+            brand.MouseDown+=DragHeader;subtitle.MouseDown+=DragHeader;MouseDown+=delegate(object sender,MouseEventArgs e){if(e.Y<S(CompactLayout?54:70))DragHeader(sender,e);};
             theme.Click+=delegate{SetTheme(!MiraTheme.Dark,true);};about.Click+=delegate{using(AboutForm f=new AboutForm())f.ShowDialog(this);};minimize.Click+=delegate{WindowState=FormWindowState.Minimized;};maximize.Click+=delegate{ToggleMaximize();};close.Click+=delegate{Close();};
             add.Click+=async delegate{await ChooseBooks();};drop.Click+=async delegate{if(!busy)await ChooseBooks();};remove.Click+=delegate{RemoveBooks();};clear.Click+=delegate{if(!busy){queue.Books.Clear();queue.Selected.Clear();queue.RefreshBooks();completedCount=0;SetStatus("Добавьте книги для конвертации");RefreshActions();RefreshProgress();}};
             azw3.Click+=delegate{SetFormat("AZW3");};epub.Click+=delegate{SetFormat("EPUB");};together.Click+=delegate{SetDestination(false);};beside.Click+=delegate{SetDestination(true);};browse.Click+=delegate{ChooseFolder();};open.Click+=delegate{OpenResultFolder();};
@@ -70,6 +70,7 @@ namespace Fb2Kindle
             MiraTheme.Changed+=ApplyTheme;initializing=false;RefreshLanguage();ApplyTheme();UpdateDestinationText();RefreshActions();
         }
         int S(int value){return (int)Math.Round(value*UiScale);}
+        bool CompactLayout{get{return ClientSize.Height<S(904);}}
         protected override void OnLoad(EventArgs e)
         {
             if(!preview)
@@ -78,7 +79,7 @@ namespace Fb2Kindle
                 Screen screen=saved==null?Screen.FromPoint(Cursor.Position):Screen.FromRectangle(saved.Bounds);
                 Rectangle work=screen.WorkingArea;
                 MinimumSize=new Size(Math.Min(S(900),work.Width-S(24)),Math.Min(S(740),work.Height-S(24)));
-                Bounds=saved==null?WindowPlacement.Center(new Size(Math.Min(S(960),work.Width-S(24)),Math.Min(S(980),work.Height-S(24))),work):WindowPlacement.Resolve(saved.Bounds,saved.WorkingArea,work,MinimumSize);
+                Bounds=saved==null?WindowPlacement.Center(new Size(Math.Min(S(960),work.Width-S(24)),Math.Min(S(820),work.Height-S(24))),work):WindowPlacement.Resolve(saved.Bounds,saved.WorkingArea,work,MinimumSize);
                 normalWindowBounds=Bounds;
                 if(saved!=null&&saved.Maximized)WindowState=FormWindowState.Maximized;
                 lastVisibleWindowState=WindowState;
@@ -113,13 +114,13 @@ namespace Fb2Kindle
         void ToggleMaximize(){WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;maximize.IconName=WindowState==FormWindowState.Maximized?"restore":"square";PerformLayout();Invalidate(true);}
         protected override void OnLayout(LayoutEventArgs e)
         {
-            base.OnLayout(e);if(brand==null||initializing)return;int w=ClientSize.Width,h=ClientSize.Height,p=S(24),inner=w-p*2;bool shortHeight=h<S(740);
+            base.OnLayout(e);if(brand==null||initializing)return;int w=ClientSize.Width,h=ClientSize.Height,p=S(24),inner=w-p*2;bool shortHeight=CompactLayout;
             logo.SetBounds(p,S(shortHeight?13:20),S(shortHeight?28:34),S(shortHeight?28:34));brand.SetBounds(p+S(47),S(shortHeight?7:15),S(350),S(28));subtitle.SetBounds(p+S(47),S(shortHeight?31:40),S(350),S(20));
             int chromeY=S(shortHeight?10:19),x=w-S(18);foreach(MiraButton b in new[]{close,maximize,minimize}){x-=S(36);b.SetBounds(x,chromeY,S(36),S(34));}x-=S(12);language.SetBounds(x-S(67),chromeY+S(3),S(62),S(28));x-=S(76);theme.SetBounds(x-S(34),chromeY,S(34),S(34));about.SetBounds(x-S(72),chromeY,S(34),S(34));
             int headingY=S(shortHeight?64:88),toolbarY=S(shortHeight?96:124),toolbarH=S(shortHeight?34:38);
             heading.SetBounds(p,headingY,S(245),S(29));int headingWidth=TextRenderer.MeasureText(heading.Text,heading.Font).Width;count.SetBounds(p+Math.Min(S(245),headingWidth)+S(10),headingY+S(3),S(120),S(24));
             add.SetBounds(p,toolbarY,S(166),toolbarH);remove.SetBounds(p+S(174),toolbarY,S(38),toolbarH);clear.SetBounds(p+S(220),toolbarY,S(170),toolbarH);formats.SetBounds(w-p-S(180),toolbarY,S(180),toolbarH);formats.TextAlign=ContentAlignment.MiddleRight;
-            int settingsY=h-S(shortHeight?184:222),dropY=settingsY-S(shortHeight?40:48),queueY=S(shortHeight?142:174),queueH=Math.Min(S(672),Math.Max(1,dropY-S(shortHeight?8:12)-queueY));
+            int settingsY=h-S(shortHeight?184:222),dropY=settingsY-S(shortHeight?40:48),queueY=S(shortHeight?142:174),queueH=Math.Min(S(672),Math.Max(1,dropY-S(shortHeight?6:12)-queueY));
             queue.SetBounds(p,queueY,inner,queueH);drop.SetBounds(p,dropY,inner,S(shortHeight?28:34));
             int colGap=S(22),col=(inner-colGap)/2,right=p+col+colGap;formatTitle.SetBounds(p,settingsY,col,S(24));saveTitle.SetBounds(right,settingsY,col,S(24));
             int controlsY=settingsY+S(shortHeight?27:31),cardGap=S(8);azw3.SetBounds(p,controlsY,(col-cardGap)/2,S(shortHeight?64:88));epub.SetBounds(p+(col-cardGap)/2+cardGap,controlsY,(col-cardGap)/2,S(shortHeight?64:88));
@@ -128,7 +129,7 @@ namespace Fb2Kindle
             int foot=h-S(shortHeight?66:80),progressW=inner-S(342);overallTitle.SetBounds(p,foot+S(shortHeight?8:14),Math.Max(S(90),progressW-S(55)),S(21));overallPercent.SetBounds(p+progressW-S(50),foot+S(shortHeight?8:14),S(50),S(21));overallPercent.TextAlign=ContentAlignment.MiddleRight;overall.SetBounds(p,foot+S(shortHeight?32:40),progressW,S(shortHeight?5:6));status.SetBounds(p,foot+S(shortHeight?40:49),progressW,S(22));
             cancel.SetBounds(w-p-S(320),foot+S(shortHeight?13:20),S(128),S(shortHeight?38:40));convert.SetBounds(w-p-S(182),foot+S(shortHeight?13:20),S(182),S(shortHeight?38:40));queue.RefreshBooks();
         }
-        protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);bool shortHeight=ClientSize.Height<S(740);int header=S(shortHeight?54:70),footer=S(shortHeight?66:80);using(SolidBrush b=new SolidBrush(MiraTheme.Surface)){e.Graphics.FillRectangle(b,0,0,Width,header);e.Graphics.FillRectangle(b,0,Height-footer,Width,footer);}using(Pen p=new Pen(MiraTheme.Border)){e.Graphics.DrawLine(p,0,header,Width,header);e.Graphics.DrawLine(p,0,Height-footer,Width,Height-footer);e.Graphics.DrawRectangle(p,0,0,Width-1,Height-1);}}
+        protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);bool shortHeight=CompactLayout;int header=S(shortHeight?54:70),footer=S(shortHeight?66:80);using(SolidBrush b=new SolidBrush(MiraTheme.Surface)){e.Graphics.FillRectangle(b,0,0,Width,header);e.Graphics.FillRectangle(b,0,Height-footer,Width,footer);}using(Pen p=new Pen(MiraTheme.Border)){e.Graphics.DrawLine(p,0,header,Width,header);e.Graphics.DrawLine(p,0,Height-footer,Width,Height-footer);e.Graphics.DrawRectangle(p,0,0,Width-1,Height-1);}}
         void SetTheme(bool dark,bool save){MiraTheme.Set(dark);if(save&&!preview){UiSettings.Theme=dark?"dark":"light";UiSettings.Save();}}
         void ApplyTheme(){BackColor=MiraTheme.Background;ForeColor=MiraTheme.Text;foreach(Control c in Controls){c.BackColor=MiraTheme.Background;c.ForeColor=c==subtitle||c==count||c==formats||c==overallPercent||c==status?MiraTheme.Muted:MiraTheme.Text;}outputFolder.BackColor=MiraTheme.Surface;outputFolder.ForeColor=beside.Selected?MiraTheme.Muted:MiraTheme.Text;pathPanel.BackColor=MiraTheme.Background;destinationModes.BackColor=MiraTheme.Soft;language.BackColor=MiraTheme.Surface;language.ForeColor=MiraTheme.Text;overall.BackColor=MiraTheme.Surface;overallTitle.BackColor=overallPercent.BackColor=status.BackColor=MiraTheme.Surface;brand.BackColor=subtitle.BackColor=MiraTheme.Surface;foreach(MiraButton b in new[]{theme,about,minimize,maximize,close,logo,language})b.BackColor=MiraTheme.Surface;browse.BackColor=cancel.BackColor=convert.BackColor=MiraTheme.Surface;open.BackColor=MiraTheme.Background;together.BackColor=beside.BackColor=MiraTheme.Soft;Invalidate(true);}
         void SetFormat(string format){if(busy)return;azw3.Selected=format=="AZW3";epub.Selected=!azw3.Selected;azw3.Invalidate();epub.Invalidate();if(!preview){UiSettings.Format=format;UiSettings.Save();}}
